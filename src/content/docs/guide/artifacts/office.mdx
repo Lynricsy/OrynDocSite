@@ -1,0 +1,77 @@
+---
+title: Word、Excel、PowerPoint 与 PDF
+description: 在 Oryn 里预览、评论、更新与下载 Office 和 PDF 文件，把文件转为 artifact，并在部署了 Office 引擎时在线编辑。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '## Artifacts'
+  - file: README.md
+    section: '## 收件箱、项目与 Artifacts'
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 2
+---
+
+import Requires from '@/components/Requires.astro';
+
+Word、Excel、PowerPoint 与 PDF 文件在 Oryn 里是一种 artifact：文件本身就是版本内容，每次更新生成一个新版本。你需要让 Agent 产出一份报告、表格或演示文稿，或者要在浏览器里查看、评论别人交来的文件时，用这一套功能。
+
+## 支持的文件类型
+
+支持 `docx` `docm` `xlsx` `xlsm` `pptx` `pptm` `pdf` 七种类型，单个文件上限 256 MiB。控制面只校验 OOXML 的容器清单与 PDF 的文件头。在 Artifacts 总览里，表格文件归为「表格」类。
+
+旧版格式与 OpenDocument 格式（`.doc` `.xls` `.ppt` `.odt` `.ods` `.odp`）不能直接作为 artifact：把文件交给 Agent 转换，或在部署了 Office 引擎后导入，导入时自动转换。
+
+## 让 Agent 制作或修改文件
+
+执行环境（orb）里的线程按内置的 `oryn-office` 技能，用 python-docx、openpyxl、python-pptx 与 ReportLab 制作文件，再登记为 artifact。你在对话里说明要什么文件即可。
+
+修改已有的文件前，Agent 先把文件取回到环境里。你在线程的终端里也可以这样做：
+
+```bash
+# 取回最新版本的入口文件，保存到当前目录
+oryn artifact pull <artifact-id> --to ./<文件名>
+```
+
+`--version` 取指定版本，`--overwrite` 在目标已存在时覆盖。这条命令只在执行环境内可用，完整参数见 [`oryn artifact`](/reference/cli/artifact/)。
+
+## 预览、评论与下载
+
+在 artifact 的查看器里：
+
+- 预览在沙箱帧里渲染：OOXML 文件用 `@silurus/ooxml` 的 WASM 渲染器，PDF 用 pdf.js。64 MiB 以内的文件生成缩略图。
+- 「评论」可以落在页内的某个位置，或 Excel 工作表的某个单元格区域。
+- 上传新版本、下载原件。
+- Word 与 PowerPoint 可以打印成 PDF。
+
+## 把文件面板或文件库里的文件转为 artifact
+
+线程右面板「文件」页签与文件库里的 Office 文件，可以用「转为 artifact」一键转换。转换后的预览与查看器使用同一套渲染组件。
+
+文件面板见[文件面板与预览](/guide/workbench/files/)，文件库见[文件库](/guide/assistant/library/)。
+
+## 在浏览器里编辑
+
+<Requires ids={['office-engine']} />
+
+管理员部署了 Collabora Online 作为 Office 引擎后，Word、Excel、PowerPoint 文件在查看器里多出「编辑」，打开所见即所得的编辑器：
+
+- 显式保存、关闭编辑器或编辑会话过期时，落下一个新版本，作者记为你。
+- 自动保存只更新草稿，不生成版本。
+- 编辑期间，其它对这个文件的写入一律被拒绝（返回 `locked`），查看器提示「正在编辑器中编辑；保存并关闭编辑器之前，其他修改会被拒绝。」
+
+部署了引擎后，Excel 的 PDF 导出与高保真 PDF 也由引擎转换。部署步骤见 [Office 引擎（Collabora）](/admin/components/office-engine/)。
+
+## 限制
+
+| 项 | 上限 |
+|---|---|
+| 单个文件 | 256 MiB |
+| 生成缩略图的文件大小 | 64 MiB |
+
+## 相关
+
+- [Artifacts 概览](/guide/artifacts/overview/)
+- [发布 Artifact 与页面能力](/guide/artifacts/publishing/)
+- [Office 引擎（Collabora）](/admin/components/office-engine/)

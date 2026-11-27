@@ -1,0 +1,117 @@
+---
+title: 发布 Artifact 与页面能力
+description: 把 artifact 发布成私有、访问码或公开链接，发布前的密钥扫描与跟随最新版本，以及页面通过 oryn.use 使用的 db、files、sample 三种能力。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '## Artifacts'
+  - file: internal/artifacts/publish.go
+  - file: internal/artifacts/public.go
+  - file: internal/artifacts/consent.go
+  - file: internal/artifacts/cap_db.go
+  - file: internal/artifacts/cap_files.go
+  - file: internal/artifacts/cap_sample.go
+  - file: web/src/pages/settings/SharingSettings.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 4
+---
+
+发布把 artifact 的某个版本变成一个独立的链接，给没有 Oryn 账号的人看。页面类 artifact 还能在 Oryn 里使用三种页面能力：存数据、读项目文件、向你的模型提问。
+
+## 发布成链接
+
+在 artifact 查看器里点「分享」，在「谁能打开」里选一种访问方式，再点「发布」：
+
+| 访问方式 | 谁能打开 |
+|---|---|
+| 「私有」 | 只有你登录后能打开。没有有效授权的请求被转到 Oryn 的 `/artifacts/open/<slug>`，由登录后的你换取授权再打开 |
+| 「访问码」 | 拿到链接和访问码的人。访问码 4 位，由小写字母与数字组成，去掉了易混的 `0` `o` `1` `l` `i` |
+| 「公开」 | 任何拿到链接的人 |
+
+发布地址取决于管理员的配置：配置了 `portal_domain` 时是 `https://p-<slug>.<portal_domain>/`，否则是主域名下的 `/p/<slug>/`。
+
+发布的是一份静态快照：页面的数据、读文件与提问能力在发布页里不可用；页面会从公共 CDN 加载脚本和字体。发布页带 `noindex` 标记，不让搜索引擎收录。
+
+改访问方式后，已经发出的访问授权随即失效。
+
+## 处理访问码
+
+- 「复制访问码」把访问码复制给对方。
+- 「换一个」生成新访问码：旧码与已经用旧码打开过的访问随即失效，对方要重新输入。
+- 访客连续输错 10 次后访问码锁定，访问码页不再接受输入。你「换一个」访问码后解除锁定。
+
+访问码页不显示 artifact 的任何内容，连标题也不显示。
+
+## 发布前的密钥扫描
+
+以「访问码」或「公开」发布，且暴露面变大时（首次发布、换到别的版本、从「私有」改过来），Oryn 先对要发布的版本做一次密钥扫描。扫描范围是扩展名为 `.html` `.htm` `.css` `.js` `.mjs` `.json` `.svg` `.md` `.txt` `.csv` `.xml` 的文本文件，单个文件超过 2 MiB 不扫描。
+
+有命中时不会直接发布，「分享」里列出疑似密钥的内容：
+
+- 确认可以公开，点「仍然发布」。
+- 否则先让 Agent 去掉这些内容，再重新发布。
+
+## 跟随最新版本
+
+新发布的链接默认「自动跟着最新版本更新」。artifact 有了新版本时：
+
+- 「私有」发布直接推进到新版本。
+- 「访问码」与「公开」发布先扫描新版本。无命中则推进；有命中则停在原版本，「分享」里提示该版本有疑似密钥、没有自动发布，点「查看并发布」确认。
+
+关掉跟随后，链接固定在当时的版本，需要时在「分享」里手动更新到最新版本。
+
+## 取消发布
+
+在「分享」里点「取消发布…」，或在「设置 → 分享与 Artifacts」的「已发布的 Artifacts」列表里操作。取消后链接与访问码立即失效，artifact 本身保留。
+
+删除一个已发布的 artifact 时，删除对话框提供「同时取消发布」。移到「最近删除」的 artifact 不能新发布，已有的发布记录照常提供、可以修改。
+
+## 自动发布新建的 Artifact
+
+「设置 → 分享与 Artifacts」里的「Artifacts 自动发布」打开后，新建的 artifact 自动以「私有」方式发布，并跟着最新版本更新。
+
+## 页面能力：`oryn.use`
+
+页面 artifact 在 Oryn 里打开时，可以调用 `oryn.use("db")`、`oryn.use("files")`、`oryn.use("sample")` 取得三种能力。能力必须在 artifact 的最新版本里声明过才能用。
+
+| 能力 | 做什么 | 要你同意 | 可用条件与上限 |
+|---|---|---|---|
+| `db` | artifact 自己的 JSON 文档存储：按集合读、写、更新、删除、列出、查询与监听变化 | 否 | — |
+| `files` | 只读地列出与读取创建这个 artifact 的线程的工作目录，不含 `.git`；没有任何写操作 | 是 | 创建它的是工作线程且有执行环境（orb），使用时会唤醒环境；单文件 20 MiB；一次列出至多 5000 项；每个 artifact 同时至多 4 个读取 |
+| `sample` | 把页面的问题交给你自己的模型，在一个没有任何工具的一次性会话里回答，不能读写文件、不能运行命令；用你自己的模型额度 | 是 | 控制面配置了 `coordinator.omp_path` 且该文件存在，见[协调宿主](/admin/components/coordinator/)；每个 artifact 同时至多 2 个问题、每分钟至多 10 个；提示至多 100000 字符，至多附 4 张图、每张 5 MiB |
+
+声明了 `files` 或 `sample` 的页面使用严格的内容安全策略，开启后不再加载任何外部资源。
+
+### 首次同意
+
+页面第一次使用 `files` 或 `sample` 时，正在看它的查看器弹出询问，问是否允许这个页面读取项目文件或向你的模型提问，选「允许」或「不允许」。
+
+- 同意按 artifact 与能力逐项保存，之后不再询问。
+- 拒绝只在有人看着这个 artifact 期间有效；所有查看器都关掉后再打开，会重新询问。
+- 没有任何查看器在看时（例如生成缩略图），页面的请求按拒绝处理。
+
+### 收回同意
+
+在「设置 → 分享与 Artifacts」的「已授权的 Artifacts」里，对某个 artifact 点「收回」。收回后，页面下次要读取项目文件或向模型提问时会重新询问。
+
+## 限制
+
+| 项 | 上限 |
+|---|---|
+| 访问码连续输错 | 10 次后锁定 |
+| 密钥扫描的单个文件 | 2 MiB |
+| `files` 单文件读取 | 20 MiB |
+| `files` 一次列出 | 5000 项 |
+| `files` 每个 artifact 并发读取 | 4 |
+| `sample` 每个 artifact 并发问题 | 2 |
+| `sample` 每个 artifact 每分钟问题数 | 10 |
+| `sample` 提示长度 | 100000 字符 |
+| `sample` 附图 | 4 张，每张 5 MiB |
+
+## 相关
+
+- [Artifacts 概览](/guide/artifacts/overview/)
+- [公开分享线程](/guide/threads/sharing/)
+- [凭据隔离与出站代理](/security/credentials/)
