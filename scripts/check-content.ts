@@ -22,16 +22,24 @@ const leakPatterns: RegExp[] = [
 	/[（(]M\d+(\.\d+)?[ab]?[)）]/,
 ];
 
+// 隐私政策是法律页面，必须写出真实的联系邮箱；只对这两页放行这一个地址，其它禁用内容照查。
+const leakExemptions: Record<string, string[]> = {
+	'src/content/docs/privacy/index.md': ['privacy@ling.plus'],
+	'src/content/docs/privacy/en.md': ['privacy@ling.plus'],
+};
+
 function frontmatter(text: string): Record<string, unknown> {
 	const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
 	return m ? ((parse(m[1]) as Record<string, unknown>) ?? {}) : {};
 }
 
 function scanLeaks(file: string, text: string) {
+	const allowed = leakExemptions[file] ?? [];
 	const lines = text.split('\n');
 	lines.forEach((line, i) => {
+		const checked = allowed.reduce((l, a) => l.replaceAll(a, ''), line);
 		for (const re of leakPatterns) {
-			if (re.test(line)) problems.push(`${file}:${i + 1}: 命中禁用内容 ${re}`);
+			if (re.test(checked)) problems.push(`${file}:${i + 1}: 命中禁用内容 ${re}`);
 		}
 	});
 }

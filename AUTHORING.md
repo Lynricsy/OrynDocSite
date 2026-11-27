@@ -25,7 +25,7 @@
 - 里程碑标签（如「（M30）」）、`plan-m*.md`、验收脚本、CI 与签名密钥、发版流程、Oryn 开发者用的 `.dev/` 路径（快速开始照抄 README 的 `.dev/quickstart-*` 命令除外：它们面向用户，在仓库检出目录里运行）。
 - 内部函数名与 RPC 名，除非是读者要敲的。
 - `docs/deploy.md` 第 16 节（作者本机的生产实例），`docs/push-gateway.md` 的「部署清单」。
-- 任何真实主机名、域名、IP。示例域名统一用 `oryn.example.com` 与 `*.orb.example.com`。
+- 任何真实主机名、域名、IP。示例域名统一用 `oryn.example.com` 与 `*.orb.example.com`。例外：官方推送网关 `push.oryn.best` 照写；隐私政策（`privacy/index.md`、`privacy/en.md`）是法律页面，照写本站与推送网关的真实地址和联系邮箱 `privacy@ling.plus`，`scripts/check-content.ts` 的 `leakExemptions` 只对这两页放行这个邮箱。隐私政策不属于上面四种页面类型，不写 `type`，用 `template: splash`（无侧栏），从页脚与[参考索引](/reference/)进入。
 
 `bun run check` 会拦下其中可机器识别的部分。
 
