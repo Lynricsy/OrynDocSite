@@ -1,0 +1,120 @@
+---
+title: 接入 Docker Provider
+description: 在控制面主机上创建 Provider、写出 provider.yaml 并用 systemd 运行，让线程的环境以 Docker 容器启动。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 5. 本机 Docker provider'
+  - file: deploy/systemd/oryn-provider.service
+  - file: internal/config/config.go
+  - file: cmd/oryn/login.go
+  - file: cmd/oryn/provider.go
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 5
+---
+
+Provider 是在宿主机上替控制面创建执行环境（orb）的进程：`oryn provider run` 向控制面拉取任务，用 Docker 启动容器。单节点部署把 Provider 与控制面放在同一台机器上。控制面要先启动并完成初始化，见[启动与初始化](/admin/install/first-start/)。
+
+## 登录并创建 Provider
+
+在控制面主机上用命令行登录，再创建一个名为 `local` 的 Provider，把它的令牌写进 `/etc/oryn/provider.token`：
+
+```bash
+oryn login --url https://oryn.example.com       # 在网页上批准设备配对
+oryn provider create local | sudo tee /etc/oryn/provider.token >/dev/null
+sudo chmod 0600 /etc/oryn/provider.token
+```
+
+`oryn login` 打印网页批准地址与配对码。在已登录的浏览器里输入配对码并「批准」后，命令行自动取得设备令牌。`oryn provider create` 的标准输出只有令牌，只显示这一次。
+
+## 写出 provider.yaml
+
+```yaml
+# /etc/oryn/provider.yaml
+url: "http://127.0.0.1:7600"         # Provider 与控制面同机，直连本地端口
+token_file: "/etc/oryn/provider.token"
+orb_url: "http://172.17.0.1:7600"    # 注入环境的 ORYN_URL = docker0 地址 + orynd 的第二个 listen
+driver: docker
+docker:
+  image: "oryn-orb:dev"
+  types: { small: {cpus: 2, memory: "4g"}, medium: {cpus: 4, memory: "8g"}, large: {cpus: 8, memory: "16g"} }
+  default_type: medium
+```
+
+| 键 | 含义 |
+|---|---|
+| `url` | Provider 连接控制面的地址 |
+| `token_file` | 上一步写出的令牌文件 |
+| `orb_url` | 注入环境的 `ORYN_URL`，环境里的 `orbd` 用它连回控制面。写 docker0 网桥地址加 `orynd.yaml` 里 `listen` 的第二项 |
+| `docker.image` | 环境镜像，即[安装二进制与镜像](/admin/install/binaries-and-image/)里构建的 `oryn-orb:dev` |
+
+Provider 放在另一台主机时，`url` 与 `orb_url` 都写主域名 `https://oryn.example.com`，环境经反代建立 link。全部键见 [`provider.yaml` 配置参考](/reference/config/provider-yaml/)。
+
+## 定义环境类型
+
+`docker.types` 是环境规格表，键是类型名称。每个类型的 `cpus` 传给 `docker run --cpus`，`memory` 传给 `docker run --memory`。
+
+| 类型 | CPU | 内存 |
+|---|---|---|
+| `small` | 2 | `4g` |
+| `medium` | 4 | `8g` |
+| `large` | 8 | `16g` |
+
+不写 `docker.types` 时取上表的默认三档；写了就只有你写的类型，不与默认合并。`docker.default_type` 是未指定类型时使用的类型名称，缺省为 `medium`，必须是 `types` 里的名称。
+
+## 用 systemd 运行
+
+仓库里的 [`deploy/systemd/oryn-provider.service`](https://github.com/Lynricsy/Oryn/blob/main/deploy/systemd/oryn-provider.service) 运行 `oryn provider run --config /etc/oryn/provider.yaml`，在 `docker.service` 与 `orynd.service` 之后启动，并加入 `docker` 组以访问 `/var/run/docker.sock`。在 Oryn 源码根目录执行：
+
+```bash
+sudo install -m 0644 deploy/systemd/oryn-provider.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now oryn-provider
+```
+
+单元文件全文：
+
+```ini
+[Unit]
+Description=Oryn Docker orb provider
+After=docker.service orynd.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/oryn provider run --config /etc/oryn/provider.yaml
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=60
+# 需要访问 /var/run/docker.sock
+SupplementaryGroups=docker
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`oryn provider ls` 列出 Provider 与在线状态。
+
+## 让停机环境可以只读预览
+
+环境停机后，文件面板不唤醒它，而是由 Provider 读取停机环境的磁盘：Docker Provider 用 `docker cp` 读已退出的容器。这要求控制面与 Provider 是同一版本；旧版 Provider 不支持时，文件面板提示「这台 orb 的 provider 不支持停机预览；唤醒后可浏览文件。」
+
+Provider 经反代连控制面时，回传文件的请求 `POST /provider/v1/fs/{id}/reply` 不能被缓冲、不能限制过小的请求体，要求见[反向代理与 HTTPS](/admin/install/reverse-proxy/)。超过 600 MiB 的文件无法在停机时预览。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 停机预览的单个文件 | 不超过 600 MiB |
+| 默认环境类型 | `small`、`medium`、`large`，缺省 `medium` |
+
+## 相关
+
+- [`oryn provider` 命令参考](/reference/cli/provider/)
+- [`provider.yaml` 配置参考](/reference/config/provider-yaml/)
+- [网络隔离与加固](/admin/install/network-isolation/)
+- [模型与密钥](/guide/agent/models-and-keys/)
+- [选择执行后端](/guide/environments/backends/)
+- [启用 Agent 沙箱](/admin/backends/sandbox/)

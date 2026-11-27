@@ -1,0 +1,115 @@
+---
+title: 安装二进制与镜像
+description: 取得控制面与命令行二进制，构建同版本的环境镜像，并准备服务用户与目录。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 1. 安装二进制与镜像'
+  - file: cmd/gemini-rerank/main.go
+  - file: README.md
+    section: '## 快速开始'
+  - file: internal/config/config.go
+verified: 6fe0baf13191
+sidebar:
+  order: 1
+---
+
+部署的第一步是在控制面主机上放好 `orynd` 与 `oryn` 两个二进制，并构建执行环境（orb）使用的镜像。二进制有两种来源，二选一；环境镜像不随版本发布，无论二进制来自哪里，都要在同一版本的源码里构建。
+
+## 检出同一版本的源码
+
+两种来源都要用到源码：构建镜像只能在源码里做。先检出与要安装的二进制相同的版本：
+
+```bash
+git clone https://github.com/Lynricsy/Oryn.git
+cd Oryn
+git checkout v<版本>
+```
+
+## 来源一：下载发布包
+
+在 [GitHub Releases](https://github.com/Lynricsy/Oryn/releases) 下载对应版本的服务端发布包与校验文件。发布包里的二进制已嵌入 Web UI，静态链接。
+
+| 文件 | 内容 |
+|---|---|
+| `oryn-server_<版本>_linux-x64.tar.gz` | x86_64 Linux 的服务端二进制 |
+| `oryn-server_<版本>_linux-arm64.tar.gz` | ARM64 Linux 的服务端二进制 |
+| `orbd_<版本>_darwin-arm64.tar.gz` | Apple 芯片 macOS 上的 `orbd`，只用于 [Runner](/guide/environments/runner/) |
+| `oryn-server_<版本>_SHA256SUMS` | 以上全部发布包的 SHA-256 校验和 |
+
+每个发布包解压后是一个与包同名的目录。两个 Linux 服务端包里有：
+
+| 文件 | 用途 |
+|---|---|
+| `orynd` | 控制面 |
+| `orbd` | 环境内守护进程；`--runner` 模式接入个人机器 |
+| `oryn` | 命令行客户端与宿主机 Provider 执行器 |
+| `gemini-rerank` | 把 Hindsight 的 Cohere 重排请求转换为 Gemini Decisions 请求的适配器 |
+| `oryn-push-gateway` | 自建推送网关，见[移动推送与自建推送网关](/admin/components/push-gateway/) |
+| `oryn-push-gateway.service` | 推送网关的 systemd 单元 |
+
+校验并安装控制面与命令行二进制（ARM64 主机把 `linux-x64` 换成 `linux-arm64`）：
+
+```bash
+sha256sum -c --ignore-missing oryn-server_<版本>_SHA256SUMS
+tar -xzf oryn-server_<版本>_linux-x64.tar.gz
+sudo install -m 0755 oryn-server_<版本>_linux-x64/{orynd,oryn} /usr/local/bin/
+```
+
+## 来源二：从源码构建
+
+在检出的源码根目录执行：
+
+```bash
+make web      # 构建 Web 客户端，复制到 internal/webui/dist 以便嵌入
+make build    # 产出 bin/orynd bin/orbd bin/oryn（嵌入上一步的前端）
+sudo install -m 0755 bin/orynd bin/oryn /usr/local/bin/
+```
+
+## 构建环境镜像
+
+镜像构建需要 `build/core/x64/omp`，由 `scripts/fetch-core.sh` 取得：
+
+```bash
+scripts/fetch-core.sh
+make image    # 构建环境镜像 oryn-orb:dev
+```
+
+`make image` 结束时会在断网容器里以非 root 用户跑冒烟测试，通过时输出 `orb 镜像离线冒烟：通过`。Docker Provider 的 `docker.image` 缺省就是 `oryn-orb:dev`，见[接入 Docker Provider](/admin/install/docker-provider/)。
+
+镜像解压后约 10.2 GB，桌面应用约增加 1.1 GB（主要来自按微软更新 API 的 `sha256` 校验安装的官方 VS Code tarball）。Docker 数据盘要预留相应空间。
+
+镜像内置应用清单 `/usr/local/share/oryn/desktop-apps.json` 与 `desktop-icons/` 图标目录。不含该清单的自定义镜像，在桌面任务栏里只有内置的 Chromium。镜像里预装了什么，见[开发镜像里有什么](/guide/environments/dev-image/)。
+
+## 创建服务用户与目录
+
+控制面以系统用户 `oryn` 运行，数据目录 `/var/lib/oryn` 只对它可读写：
+
+```bash
+sudo useradd --system --home /var/lib/oryn --shell /usr/sbin/nologin oryn
+sudo install -d -o oryn -g oryn -m 0700 /var/lib/oryn
+sudo install -d -m 0755 /etc/oryn
+```
+
+`/etc/oryn` 放下一步写的 `orynd.yaml` 与之后的 `provider.yaml`。
+
+## 安装 git
+
+控制面主机需要 git 2.31 或更高版本，项目仓库镜像与仓库浏览用它。用 `git --version` 查看当前版本。
+
+没有 git 或版本过旧时，`orynd` 照常启动，启动日志记一条「控制面没有可用的 git，仓库浏览停用」，项目页的仓库区块显示原因，其余功能照常。装好 git 后重启 `orynd` 生效。控制面不需要安装 `git-lfs`。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 服务端发布包的平台 | `linux-x64`、`linux-arm64` |
+| 控制面主机的 git 版本 | ≥ 2.31 |
+| 环境镜像解压后大小 | 约 10.2 GB |
+
+## 相关
+
+- [配置控制面](/admin/install/control-plane/)
+- [部署总览](/admin/overview/)
+- [升级](/admin/operations/upgrade/)
+- [仓库镜像与托管仓库入口](/admin/components/repos/)

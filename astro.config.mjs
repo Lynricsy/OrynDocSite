@@ -79,6 +79,7 @@ export default defineConfig({
 							link: '/admin/overview/',
 							icon: 'setting',
 							items: [
+								'admin/overview',
 								group('基础部署', 'admin/install'),
 								group('执行后端', 'admin/backends'),
 								group('可选组件', 'admin/components'),

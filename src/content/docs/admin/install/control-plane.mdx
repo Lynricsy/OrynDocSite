@@ -1,0 +1,99 @@
+---
+title: 配置控制面
+description: 写出控制面配置文件 /etc/oryn/orynd.yaml，确定监听地址、访问地址与数据目录，并了解哪些键可以在界面里覆盖。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 2. 控制面配置 `/etc/oryn/orynd.yaml`'
+  - file: internal/opsconf/opsconf.go
+  - file: internal/config/config.go
+verified: 6fe0baf13191
+sidebar:
+  order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+控制面 `orynd` 启动时读取 `/etc/oryn/orynd.yaml`。下面给出单节点部署的最小配置，并说明部署前必须按你的主机改动的键。全部键、类型、默认值与约束见 [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/)。
+
+## 写出最小配置
+
+```yaml
+# /etc/oryn/orynd.yaml
+listen: ["127.0.0.1:7600", "172.17.0.1:7600"]   # 第二项 = docker0 网桥地址，供本机环境直连
+public_url: "https://oryn.example.com"          # WebAuthn RP ID 取其主机名，必须与浏览器访问地址一致
+portal_domain: "orb.example.com"               # Portal 泛域名；留空则不启用 Portal
+data_dir: "/var/lib/oryn"
+log_level: "info"
+idle: { agent_idle: "5m", user_idle: "20m", stop_after_frozen: "24h", wake_on_focus: true }
+orb_defaults: { provider: "", type: "" }
+push: { gateway: { url: "https://push.oryn.best" } }   # 官方推送网关；空串 = 关闭
+repos: { git: "", max_mirror_gb: 5, max_lfs_cache_gb: 2, min_free_gb: 2 }   # 项目仓库镜像（以上为默认值）
+```
+
+## 改成你的主机的值
+
+下面几个键在每台主机上都不同，部署前逐一核对。
+
+| 键 | 含义 | 怎么填 |
+|---|---|---|
+| `listen` | 控制面的监听地址列表 | 第一项 `127.0.0.1:7600` 供反向代理转发；第二项是 docker0 网桥地址，执行环境（orb）不经反代，直接连这个地址。docker0 地址因机器而异，用 `ip -4 addr show docker0` 查看（有的机器是 `172.18.0.1`） |
+| `public_url` | 浏览器访问 Oryn 的地址 | 写你的主域名，如 `https://oryn.example.com`。WebAuthn 的 RP ID 取它的主机名，必须与浏览器访问地址一致 |
+| `portal_domain` | Portal 泛域名 | 写泛域名的父域，如 `orb.example.com`；留空则不启用 Portal。配置方法见[启用 Portal 泛域名](/admin/install/portal/) |
+| `data_dir` | 控制面数据目录 | 与上一步创建的 `/var/lib/oryn` 一致 |
+
+用于隔离环境的专用网桥会改变 `listen` 的第二项，见[网络隔离与加固](/admin/install/network-isolation/)。
+
+`push.gateway.url` 缺省指向官方推送网关；写空串 `""` 关闭网关。何时需要改它，见[移动推送与自建推送网关](/admin/components/push-gateway/)。
+
+## 调整空闲冻结
+
+`idle` 控制环境何时冻结、何时停机。其中 `wake_on_focus` 控制打开线程页时是否唤醒冻结的环境。已停机的环境不会因此唤醒：打开线程页时文件面板只读浏览，你发消息或点「唤醒」后才冷启动。各键的默认值与约束见[配置参考的 `idle` 一节](/reference/config/orynd-yaml/)；环境状态的变化见[环境如何随线程生灭](/guide/environments/lifecycle/)。
+
+## 设置仓库镜像上限
+
+控制面在 `<data_dir>/repos/` 为项目维护仓库镜像，`repos` 下的键限制它占用的磁盘：
+
+| 键 | 缺省 | 作用 |
+|---|---|---|
+| `repos.git` | 空 | git 可执行文件。空 = 在 `PATH` 里找 `git`；不带斜杠的名字同样按 `PATH` 查找；带斜杠的相对路径按启动目录转成绝对路径 |
+| `repos.max_mirror_gb` | `5` | 单个镜像的大小上限。克隆或拉取过程中每 5 秒复查一次，超过就终止 git（首次克隆的半成品随即删掉，已有镜像保留旧内容）；拉取完成后镜像超过上限则删除镜像。两种情况项目页都显示「仓库超过镜像大小上限」 |
+| `repos.max_lfs_cache_gb` | `2` | 镜像项目 Git LFS 对象缓存的总上限（所有项目合计）。超过时先删最久没用的对象。缓存在 `<data_dir>/repos/.lfs-cache/`，不计入镜像大小 |
+| `repos.min_free_gb` | `2` | 数据盘至少保留的可用空间。低于它时不克隆、不拉取（进行中的拉取会被终止）、不向上游取 LFS 对象 |
+
+三个数值写 `0` 都按缺省值处理，写负数时 `orynd` 启动报错。数据盘与 `oryn.db` 同盘，写满会让整个控制面停摆，`min_free_gb` 就是为此保留的余量。
+
+<Aside type="caution">
+`<data_dir>/repos/` 不全是可再生的缓存：Oryn 托管仓库的正本也在这里（`<data_dir>/repos/<项目 id>.git`，目录里有标记文件 `oryn-hosted`），没有别的副本。备份 `data_dir` 时必须包含 `repos/`，并与 `oryn.db` 一起备份、一起恢复。见[备份](/admin/operations/backup/)。
+</Aside>
+
+把库恢复到旧备份后，找不到项目行的托管仓库会在 `orynd` 启动时被移到 `<data_dir>/repos/orphaned/<项目 id>.git-<Unix 秒>`，而不是删除（日志记一条错误）。镜像的任何清理逻辑都不会删除带 `oryn-hosted` 标记的目录。
+
+## 在界面里覆盖运维参数
+
+「设置 → 控制面」可以覆盖下面 12 个键。覆盖优先于 `orynd.yaml`，存在 `oryn.db` 里，改完不用重启。在那里点「恢复」删除覆盖后，回落到 `orynd.yaml` 里的值。
+
+| 分组 | 键 |
+|---|---|
+| 空闲冻结 | `idle.agent_idle`、`idle.user_idle`、`idle.stop_after_frozen`、`idle.wake_on_focus` |
+| 统计保留期 | `stats.retention.samples`、`stats.retention.events`、`stats.retention.usage` |
+| 仓库镜像 | `repos.max_mirror_gb`、`repos.min_free_gb`、`repos.max_lfs_cache_gb` |
+| 快照 | `snapshots.max_total_gb`、`snapshots.max_snapshot_gb` |
+
+其余键只能写在 `orynd.yaml` 里。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 可在「控制面」设置页覆盖的键 | 12 个 |
+| 界面覆盖的取值上限 | 时长 100 年；容量 1,000,000 GB |
+| `repos.*` 三个数值 | 不能为负；`0` 按缺省值处理 |
+
+## 相关
+
+- [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/)
+- [反向代理与 HTTPS](/admin/install/reverse-proxy/)
+- [启动与初始化](/admin/install/first-start/)
+- [仓库镜像与托管仓库入口](/admin/components/repos/)
+- [统计数据的保留与重算](/admin/operations/stats-retention/)

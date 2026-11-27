@@ -1,0 +1,128 @@
+---
+title: 网络隔离与加固
+description: 把执行环境放进专用网桥并用防火墙只放行到控制面的连接，了解容器默认去掉的能力与浏览器沙箱。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 7. 安全'
+  - file: docs/deploy.md
+    section: '### 容器能力'
+  - file: docs/deploy.md
+    section: '### 桌面浏览器沙箱（M8）'
+  - file: docs/deploy.md
+    section: '### 网络隔离'
+verified: 6fe0baf13191
+sidebar:
+  order: 7
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+执行环境（orb）里的 Agent 有 root（镜像给 `user` 配了免密 sudo），应把环境当作不可信代码来隔离。本页的几项按需逐一启用；其中网络隔离需要你改控制面与 Provider 的配置并加防火墙规则，容器能力与浏览器沙箱是 Docker 驱动的默认行为。
+
+## 了解不隔离时的暴露面
+
+<Aside type="caution">
+默认网桥上的环境能访问宿主上的所有服务（例如数据库）、局域网、云厂商元数据地址 `169.254.169.254`，以及彼此。
+</Aside>
+
+建议给环境一个专用网桥，并用防火墙只放行环境到控制面的连接。下面四步完成这件事。
+
+## 创建专用网桥
+
+创建关闭容器间通信（icc）的专用网桥：
+
+```bash
+docker network create --driver bridge \
+  --subnet 172.30.0.0/24 --gateway 172.30.0.1 \
+  -o com.docker.network.bridge.name=oryn0 \
+  -o com.docker.network.bridge.enable_icc=false \
+  oryn-orbs
+```
+
+## 让环境使用专用网桥
+
+把控制面的第二个监听地址与 Provider 的 `orb_url` 改成该网桥的网关，并让 Docker 把环境接入这个网络：
+
+```yaml
+# /etc/oryn/orynd.yaml
+listen: ["127.0.0.1:7600", "172.30.0.1:7600"]
+```
+
+```yaml
+# /etc/oryn/provider.yaml
+orb_url: "http://172.30.0.1:7600"
+docker:
+  extra_run_args: ["--network", "oryn-orbs"]
+```
+
+`orynd` 要绑定 `172.30.0.1`，必须在 Docker 建好 `oryn0` 之后启动，例如给 `orynd.service` 加 `After=docker.service`。
+
+## 添加防火墙规则
+
+环境到宿主自身地址的流量走 `INPUT` 链，到其它网络的流量走 `FORWARD` 链（Docker 为用户规则预留了 `DOCKER-USER`）：
+
+```bash
+# 宿主：只允许 orb 访问控制面 7600 端口（-I 逆序插入，最终顺序为 已建立 → 7600 → 丢弃）
+iptables -I INPUT -i oryn0 -j DROP
+iptables -I INPUT -i oryn0 -p tcp -d 172.30.0.1 --dport 7600 -j ACCEPT
+iptables -I INPUT -i oryn0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+# 转发：orb 不能访问私有网段、CGNAT 与链路本地地址（含元数据 169.254.169.254）；公网照常
+for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 169.254.0.0/16; do
+  iptables -I DOCKER-USER -i oryn0 -d "$net" -j DROP
+done
+```
+
+- **DNS**：容器经 Docker 内置解析器（`127.0.0.11`）转发到宿主配置的上游。上游在私有网段（例如路由器 `192.168.1.1`）时，转发可能被上面的丢弃规则挡住。在 `extra_run_args` 里加 `--dns 1.1.1.1` 之类的公网解析器，或在丢弃规则之前放行该上游的 53 端口。
+- **持久化**：这些规则重启后不保留。用 `iptables-persistent` / `netfilter-persistent save`，或写进你使用的防火墙（firewalld / ufw）的对应配置。
+- **IPv6**：网桥启用了 IPv6 时，用 `ip6tables` 对 `fc00::/7`、`fe80::/10` 做同样的限制。
+
+## 验证隔离
+
+在某个环境的终端里执行：
+
+```bash
+curl -m3 http://172.30.0.1:7600/healthz      # 应成功
+curl -m3 http://169.254.169.254/             # 应超时
+```
+
+访问宿主的其它端口、访问另一个环境的地址，也都应超时。
+
+## 了解容器默认去掉的能力
+
+Docker 驱动默认给每个环境加 `--cap-drop NET_RAW --cap-drop NET_ADMIN`。即使在容器内是 root，Agent 也不能发原始包（ARP 欺骗同网桥上其它环境的 link），也不能改路由与防火墙。
+
+## 了解浏览器沙箱
+
+环境里的 Chromium 与 VS Code 需要建 user namespace 才能带沙箱运行。
+
+- Docker 驱动给新容器加 `--security-opt seccomp=<orb-seccomp.json>`（仓库里的 `internal/providerrt/orb-seccomp.json`）：在 moby 默认配置末尾追加一条规则，放行 `clone` / `unshare` 建 user namespace，供 Chromium 自己的沙箱使用；mount、setns、clone3 仍按默认只给有 `CAP_SYS_ADMIN` 的进程。`extra_run_args` 里自带 `seccomp` 选项时不追加。代价是环境内进程能建 user namespace，内核暴露面略增，与 Chrome 官方推荐的容器配置相同。
+- 环境里的 `orbd` 启动时探测能否建 user namespace：能，则 Chromium 与 VS Code 带沙箱运行；不能（升级前建的旧容器、dispatch 驱动的机器），都退回 `--no-sandbox`，Chromium 保留警告条。只有新建的环境才有沙箱。
+- 镜像里的受管策略 `/etc/chromium/policies/managed/oryn.json`（root 所有，不随 Profile 传播）禁止安装扩展、把代理固定为直连，防止被注入的 Agent 往共享 Profile 里植入扩展或代理。
+
+## 定期重建镜像
+
+Chromium 与 VS Code 随环境镜像发布。要定期重建镜像以跟进安全更新：
+
+```bash
+make image
+```
+
+已存在的环境用的仍是旧镜像。构建方法见[安装二进制与镜像](/admin/install/binaries-and-image/)。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 示例专用网桥 | `oryn0`，网段 `172.30.0.0/24`，网关 `172.30.0.1` |
+| 丢弃的目标网段 | `10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`100.64.0.0/10`、`169.254.0.0/16` |
+| 防火墙规则 | 重启后不保留，需自行持久化 |
+
+## 相关
+
+- [安全模型总览](/security/overview/)
+- [带 Docker 的环境（Sysbox）](/admin/backends/sysbox/)
+- [启用 Agent 沙箱](/admin/backends/sandbox/)
+- [接入 Docker Provider](/admin/install/docker-provider/)
+- [`provider.yaml` 配置参考](/reference/config/provider-yaml/)

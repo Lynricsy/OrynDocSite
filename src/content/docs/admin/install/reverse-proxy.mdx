@@ -1,0 +1,190 @@
+---
+title: 反向代理与 HTTPS
+description: 把控制面放到 OpenResty 或 Nginx 之后，为主域名与 Portal 泛域名提供 HTTPS，并满足 WebSocket、长连接与大请求体的要求。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 3. 反代（1Panel OpenResty）'
+  - file: deploy/openresty/oryn.conf
+  - file: docs/deploy.md
+    section: '## Portal（受管服务的浏览器入口）'
+  - file: docs/deploy.md
+    section: '## 5. 本机 Docker provider'
+verified: 6fe0baf13191
+sidebar:
+  order: 3
+---
+
+控制面只监听本机地址，浏览器、桌面与手机 App、命令行都经反向代理访问它。仓库里的 [`deploy/openresty/oryn.conf`](https://github.com/Lynricsy/Oryn/blob/main/deploy/openresty/oryn.conf) 是一份完整的 OpenResty / Nginx 配置，本页先列出反代必须满足的要求，再给出这份配置。
+
+## 准备域名与证书
+
+反代上有两个站点，都转发到控制面的 `http://127.0.0.1:7600`：
+
+| 站点 | 用途 | 证书 |
+|---|---|---|
+| 主域名 `oryn.example.com` | Web 客户端、REST、WebSocket、Provider 与环境的 link | 普通证书 |
+| 泛域名 `*.orb.example.com` | Portal：每个受管服务一个子域名 | `*.orb.example.com` 通配证书，用 ACME DNS-01 申请 |
+
+泛域名站点只在启用 Portal 时需要，见[启用 Portal 泛域名](/admin/install/portal/)。Portal 地址沿用 `public_url` 的协议与端口，所以反代必须在同一端口上同时服务主域名与泛域名。
+
+## 核对反代的要求
+
+自己写反代配置，或改动示例配置时，逐项保留下面的行为。示例配置已全部包含。
+
+| 要求 | 配置 | 说明 |
+|---|---|---|
+| WebSocket 升级 | `proxy_http_version 1.1`，透传 `Upgrade` 与 `Connection` 头 | WebSocket 与执行环境（orb）的 link 要用到 |
+| 长超时 | `proxy_read_timeout 3600s` | — |
+| 不缓冲 | `proxy_buffering off` | Portal 里的 WebSocket 与 SSE 需要 `Upgrade` 头与关闭缓冲 |
+| 请求体上限 | `client_max_body_size 600m` | `/git/` 以外的路径都用这个上限 |
+| `/git/` 不限请求体 | `location /git/` 里 `client_max_body_size 0` 与 `proxy_request_buffering off` | 你本机的 `git push` 与 Git LFS 上传经这里到达控制面，托管仓库不设大小上限。缺少这两项时，大推送会被 413 拒绝，或先整个缓冲到反代的磁盘上 |
+| 公开路径直达 | `/api/v1/public/` 下不加 IP 白名单、Basic Auth 或单点登录 | 这些路径不需要登录，必须能从公网直接到达 |
+| 传来源 IP | `proxy_set_header X-Real-IP $remote_addr` | 控制面按来源 IP 限流公开入口。不传时所有调用方共用反代的回环地址，一起被限流 |
+| 泛域名透传 `Host`、不缓存 | 泛域名站点 `proxy_set_header Host $host`，`proxy_cache off` | 控制面按 `Host` 把请求分流到 Portal；Portal 的响应可能是所有者私有内容，鉴权由控制面逐请求判定 |
+
+`/git/` 路径的数据盘保护在控制面里：可用空间低于 `repos.min_free_gb` 时，控制面拒绝推送与上传。执行环境里的推送与上传在 link 里传输，不经 `/git/`，也不受这条上限影响。
+
+`/api/v1/public/` 下有两类入口：`/api/v1/public/github/webhook` 接收 GitHub 的仓库 webhook，`/api/v1/public/hooks/` 接收定时任务的入站 Webhook。后者的请求体上限（64 KiB）与按来源 IP 的限流由控制面执行，不需要单独的 `location`。
+
+Provider 在另一台主机、经反代连控制面时，它回传停机环境文件的请求 `POST /provider/v1/fs/{id}/reply` 不能被缓冲。示例里的 `proxy_request_buffering off` 与 `client_max_body_size 600m` 已经满足；超过 600 MiB 的文件无法在环境停机时预览。
+
+## 安装示例配置
+
+1. 把 `deploy/openresty/oryn.conf` 放进 OpenResty / Nginx 的 `conf.d`。
+2. 把 `oryn.example.com` 与 `orb.example.com` 换成你的域名，把 `ssl_certificate` 与 `ssl_certificate_key` 换成你的证书文件路径。
+3. 让 OpenResty / Nginx 重新加载配置。
+
+配置全文（与仓库文件相同，注释略有删改）：
+
+```nginx
+# Oryn 反代配置（OpenResty / Nginx）。把 oryn.example.com / orb.example.com 换成实际域名。
+# 证书：主域名证书 + *.orb.example.com 通配证书（DNS 验证）。
+
+map $http_upgrade $oryn_connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# 主域名：Web 客户端、REST、WebSocket、provider 与 orb link
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name oryn.example.com;
+
+    ssl_certificate     /www/sites/oryn.example.com/ssl/fullchain.pem;
+    ssl_certificate_key /www/sites/oryn.example.com/ssl/privkey.pem;
+
+    client_max_body_size 600m;
+
+    location / {
+        proxy_pass http://127.0.0.1:7600;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $oryn_connection_upgrade;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+
+    # 托管仓库：git 推送与 Git LFS 上传不限请求体（托管仓库不设大小上限）；其余路径仍是 600m。
+    # orb 的推送与上传走 link，不经这里。数据盘的保护在 orynd 里（repos.min_free_gb）。
+    location /git/ {
+        client_max_body_size 0;
+        proxy_pass http://127.0.0.1:7600;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $oryn_connection_upgrade;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+
+    # Office 引擎的 WOPI 回调：引擎把写令牌放在查询串 access_token 里（默认 CODE 镜像不做请求签名，
+    # 令牌就是对文档的写凭证），访问日志里的 $request 会把它原样落盘，所以这个前缀不记访问日志。
+    # PutFile 的请求体可达 256 MiB，沿用主域的 600m 上限并关闭请求缓冲。
+    location /wopi/ {
+        access_log off;
+        proxy_pass http://127.0.0.1:7600;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+}
+
+# 泛域名：每个 portal 一个子域名 t-<线程短码>-p<端口>.orb.example.com（orynd.yaml 的 portal_domain）。
+# orynd 按 Host 把这些请求分流到 portal 数据面：必须原样透传 Host，且不得在反代上缓存
+# （portal 的响应可能是所有者私有内容，鉴权由 orynd 按 Cookie / 令牌逐请求判定）。
+# portal 与主域名必须同协议、同端口；WebSocket 与 SSE 需要下面的 Upgrade 头与关闭缓冲。
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name *.orb.example.com;
+
+    ssl_certificate     /www/sites/orb.example.com/ssl/fullchain.pem;
+    ssl_certificate_key /www/sites/orb.example.com/ssl/privkey.pem;
+
+    client_max_body_size 600m;
+
+    location / {
+        proxy_pass http://127.0.0.1:7600;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $oryn_connection_upgrade;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_cache off;
+    }
+}
+
+server {
+    listen 80;
+    server_name oryn.example.com *.orb.example.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+## 为 Office 引擎关闭回调日志
+
+部署 Office 引擎时，引擎回调控制面的 `/wopi/` 走主域名，回调的查询串里带着写令牌。示例配置给 `/wopi/` 单独设了 `access_log off`；走默认的 `location /` 会被访问日志的 `$request` 原样记下。自己写反代配置时，同样要给这个前缀关掉访问日志，或只记不带查询串的 `$uri`。
+
+引擎本身用单独的域名，对应的虚拟主机配置是 `deploy/openresty/oryn-office.conf`，见 [Office 引擎（Collabora）](/admin/components/office-engine/)。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 主域名与泛域名的请求体上限 | 600m（`/git/` 不限） |
+| 入站 Webhook 请求体上限 | 64 KiB（由控制面执行） |
+| 读写超时 | 3600 秒 |
+| 停机环境可预览的单个文件 | 不超过 600 MiB |
+
+## 相关
+
+- [启用 Portal 泛域名](/admin/install/portal/)
+- [启动与初始化](/admin/install/first-start/)
+- [仓库镜像与托管仓库入口](/admin/components/repos/)
+- [入站 Webhook](/guide/automation/webhooks/)
+- [Office 引擎（Collabora）](/admin/components/office-engine/)

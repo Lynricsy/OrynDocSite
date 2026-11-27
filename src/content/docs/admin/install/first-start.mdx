@@ -1,0 +1,96 @@
+---
+title: 启动与初始化
+description: 用 systemd 启动控制面，打开一次性的 setup 链接注册 Passkey，并保存恢复码。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 4. 启动控制面并初始化'
+  - file: deploy/systemd/orynd.service
+  - file: cmd/orynd/main.go
+  - file: docs/deploy.md
+    section: '## 2. 控制面配置 `/etc/oryn/orynd.yaml`'
+verified: 6fe0baf13191
+sidebar:
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+控制面第一次启动时还没有所有者，它在日志里打印一条一次性的 setup 链接。你用这条链接注册 Passkey，成为这套 Oryn 的所有者。开始前先完成[配置控制面](/admin/install/control-plane/)与[反向代理与 HTTPS](/admin/install/reverse-proxy/)。
+
+## 安装 systemd 单元并启动
+
+仓库里的 [`deploy/systemd/orynd.service`](https://github.com/Lynricsy/Oryn/blob/main/deploy/systemd/orynd.service) 以 `oryn` 用户运行 `/usr/local/bin/orynd --config /etc/oryn/orynd.yaml`，进程退出后 2 秒自动重启，只允许写 `/var/lib/oryn`。在 Oryn 源码根目录执行：
+
+```bash
+sudo install -m 0644 deploy/systemd/orynd.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now orynd
+```
+
+单元文件全文：
+
+```ini
+[Unit]
+Description=Oryn 控制面 (orynd)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/orynd --config /etc/oryn/orynd.yaml
+Restart=always
+RestartSec=2
+User=oryn
+Group=oryn
+StateDirectory=oryn
+StateDirectoryMode=0700
+LimitNOFILE=65536
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/oryn
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## 取得 setup 链接
+
+从日志里找出 setup 链接：
+
+```bash
+journalctl -u orynd | grep 'setup#token='
+```
+
+输出里有一条形如 `https://oryn.example.com/setup#token=ost_…` 的地址，主机名取自 `public_url`。令牌在 URL 片段（`#` 之后）里，不会进入反代的访问日志。
+
+链接丢失时，重新生成一条：
+
+```bash
+sudo -u oryn orynd --config /etc/oryn/orynd.yaml setup-token
+```
+
+`--config` 必须写在子命令之前，见 [orynd 命令参考](/reference/cli/orynd/)。
+
+## 注册 Passkey 并保存恢复码
+
+在浏览器里打开 setup 链接，注册 Passkey。注册完成后页面显示 10 个恢复码，只显示这一次。
+
+<Aside type="caution">
+10 个恢复码只显示这一次，关掉页面后无法再查看，只能重新生成。现在就把它们妥善保存。
+</Aside>
+
+之后可以在「设置 → 账户与设备」里重新生成恢复码、管理 Passkey（新增、改名、删除）。新增、删除 Passkey 与重新生成恢复码之前，要先用 Passkey 验证一次，而且要在浏览器里操作：桌面端和移动端的内嵌页面用不了 Passkey。日常登录与设备配对见[浏览器：登录、设备与外观](/guide/clients/web/)。
+
+## 为什么必须走 HTTPS
+
+- Passkey（WebAuthn）的 RP ID 取 `public_url` 的主机名，必须与浏览器访问地址一致。
+- 桌面 App（Windows / macOS / Linux）连接的就是这个 `public_url`，它要求服务器走 HTTPS：会话 Cookie 带 `Secure`；Linux 上的 WebKitGTK 连 `http://localhost` 也不接受。
+
+## 相关
+
+- [接入 Docker Provider](/admin/install/docker-provider/)
+- [orynd 命令参考](/reference/cli/orynd/)
+- [桌面 App](/guide/clients/desktop/)
+- [浏览器：登录、设备与外观](/guide/clients/web/)

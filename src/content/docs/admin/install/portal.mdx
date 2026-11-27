@@ -1,0 +1,119 @@
+---
+title: 启用 Portal 泛域名
+description: 为 Portal 配置通配 DNS、通配证书与 portal_domain，让受管服务、Boxes 应用、Artifact 隔离帧与发布页可以从浏览器访问。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## Portal（受管服务的浏览器入口）'
+  - file: docs/deploy.md
+    section: '### Boxes 应用与数据持久化（M23）'
+  - file: deploy/openresty/oryn.conf
+verified: 6fe0baf13191
+sidebar:
+  order: 6
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Portal 是执行环境（orb）里受管服务的浏览器入口：带 Portal 的服务经 `https://t-<线程短码>-p<端口>.<portal_domain>/` 访问。控制面按 `Host` 分流，落在 `portal_domain` 单级子域上的请求只走 Portal 数据面，永远到不了 `/api/v1`、环境的 link 与 Web 客户端。不配置 `portal_domain` 时不启用 Portal。
+
+## 同一个泛域名还承载什么
+
+`portal_domain` 的通配 DNS 记录与 `*.<portal_domain>` 通配证书由下面几类地址共用，启用 Portal 后它们不需要新的 DNS 记录或反代站点：
+
+| 地址 | 用途 |
+|---|---|
+| `t-<短码>-p<端口>.<portal_domain>` | 线程里受管服务的 Portal |
+| `<app>.<portal_domain>` | Boxes 部署的应用 |
+| `a-…`、`p-…` 开头的子域名 | Artifact 隔离帧与发布页 |
+
+未配置 `portal_domain` 时仍可使用 Boxes，但应用没有外部地址，应用进程里的 `ORYN_DEPLOYMENT_URL` 为空串。
+
+## 添加通配 DNS 记录
+
+给 `portal_domain` 加通配记录，例如 `*.orb.example.com` 指向反代所在主机（A / AAAA 或 CNAME）。
+
+## 申请通配证书
+
+为 `*.orb.example.com` 申请通配证书（ACME DNS-01）。通配证书只覆盖一级子域，Portal 主机名恰好是一级。
+
+## 配置反代
+
+泛域名的 `server` 块要原样透传 `Host`，开启 WebSocket 升级，关闭缓冲与缓存。[反向代理与 HTTPS](/admin/install/reverse-proxy/) 里的示例配置已包含这个 `server` 块。
+
+Portal 地址沿用 `public_url` 的协议与端口：`public_url` 带非默认端口时，Portal 地址也带同一端口。反代必须在同一端口上同时服务主域名与泛域名。
+
+## 设置 portal_domain
+
+在 `/etc/oryn/orynd.yaml` 里写：
+
+```yaml
+portal_domain: "orb.example.com"
+```
+
+- 写小写主机名，不带协议、端口与尾点。
+- `public_url` 的主机名不得是 `<单标签>.<portal_domain>`，否则主域名会被当成 Portal 主机，`orynd` 启动时报错。主域名等于 `portal_domain` 本身是允许的。
+
+改完后重启控制面：
+
+```bash
+sudo systemctl restart orynd
+```
+
+## 把主域名与泛域名放在同一注册域下
+
+线程页的 Portal 标签以 iframe 内嵌 Portal，登录态是 Portal 主机自己的 host-only Cookie（`__Host-oryn_portal`，`SameSite=None; Secure; Partitioned`）。
+
+- 主域名与 Portal 域名在同一注册域下（如 `oryn.example.com` 与 `*.orb.example.com`）时，两者同站，拦截第三方 Cookie 的浏览器里内嵌也可用。
+- 放在不同注册域下时，部分浏览器会拦截内嵌页的 Cookie，此时 Portal 页面给出「在新窗口打开」的链接。
+
+## 了解访问控制与唤醒
+
+- Portal 默认只有所有者能打开：网页会话经一次性码换取 Portal Cookie；命令行与 App 直接带 `Authorization: Bearer odt_…`。
+- 线程页的 Portal 标签可以按端口限时公开（1 小时 / 3 小时 / 1 天 / 7 天），到期或终止时立即断开匿名连接。应用可以读请求头 `X-Oryn-Authenticated: owner=yes|no` 区分访问者。
+- 已授权的 Portal 请求（含公开访客）计为用户交互。环境冻结或停机时，浏览器打开 Portal 先看到一个正在唤醒的过渡页并自动刷新，其它请求最多等待 25 秒。
+
+Boxes 应用与线程 Portal 不同：
+
+- box 应用默认公开；设为私有后，经 `/portal/auth?h=<app>` 握手换取该应用主机的 `__Host-oryn_portal` Cookie。
+- 应用请求不计用户交互，不唤醒停机的 box；停机时回 `503 app_unavailable`。
+- 普通响应保留应用自己的 `X-Frame-Options` 与 CSP，只有带 `?oryn-preview` 的主站悬停预览请求会改写内嵌头。
+
+在线程里使用 Portal 见[受管服务与 Portal 预览](/guide/workbench/portal-services/)。
+
+## 了解 box 数据何时丢失
+
+每台 box 是一台带 `box` 标记的常驻环境。应用的 release（`~/apps/<app>/releases/`）与跨部署数据目录（`~/apps/<app>/data/`）直接存在这台环境的磁盘里，不挂载独立的宿主卷：Docker / Sysbox 驱动下是容器可写层，Firecracker 驱动下是该 VM 的可写盘。
+
+| 操作 | 数据 |
+|---|---|
+| 容器或 VM 重启 | 保留 |
+| 手动或按时段停机再启动 | 保留 |
+| 重新部署、回滚 | 保留 |
+| 下线应用（`undeploy`） | 默认保留 `~/apps/<app>/data/`；传 `--purge-data`（或 REST `purgeData=true`）才一并删除 |
+| 删除 box | 整台机器上的全部应用与数据永久丢失 |
+| 在宿主上直接 `docker rm` 容器、删除 VM 目录 | 整台机器上的全部应用与数据永久丢失 |
+
+<Aside type="caution">
+删除 box，或在宿主上直接 `docker rm` 它的容器、删除它的 VM 目录，会连同整台机器上的全部应用与数据永久丢失。
+</Aside>
+
+同一台 box 上的所有应用与线程以同一个带免密 `sudo` 的 `user` 运行，彼此没有隔离，不可信的应用应放到单独的 box。已存在的 box 不会随重建 `oryn-orb` 镜像自动更新 `orbd`。
+
+Firecracker 驱动下，运行或冻结中的 box 持续占用 `firecracker.limits.max_vms` 的一个名额，并计入 `limits.max_memory_mb`；磁盘大小取全局的 `firecracker.disk_gb`，不能按单台 box 调整。见 [Firecracker Provider](/admin/backends/firecracker/)。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| Portal 子域层级 | 一级（`*.<portal_domain>`） |
+| 限时公开的时长 | 1 小时 / 3 小时 / 1 天 / 7 天 |
+| 唤醒时非页面请求的最长等待 | 25 秒 |
+
+## 相关
+
+- [反向代理与 HTTPS](/admin/install/reverse-proxy/)
+- [受管服务与 Portal 预览](/guide/workbench/portal-services/)
+- [认识 Boxes](/guide/boxes/overview/)
+- [发布 Artifact 与页面能力](/guide/artifacts/publishing/)
+- [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/)
