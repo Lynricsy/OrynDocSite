@@ -1,0 +1,124 @@
+---
+title: 快照与预热池
+description: 控制面里项目快照与预热池的全局设置、快照的生成与失效条件、磁盘占用的约束与清理。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 10. 加速：项目快照、预热池与带 Docker 的 orb（M11a）'
+  - file: docs/deploy.md
+    section: '### 项目快照'
+  - file: docs/deploy.md
+    section: '### 预热池'
+  - file: docs/deploy.md
+    section: '## 2. 控制面配置 `/etc/oryn/orynd.yaml`'
+  - file: cmd/oryn/project.go
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+项目快照把项目执行环境（orb）第一次 setup 成功后的磁盘存起来，之后同一项目的新环境从快照启动；预热池为项目提前开好已完成 setup、尚未绑定线程的环境，新线程直接认领。两者都由控制面 `orynd.yaml` 的 `snapshots` 与 `pool` 两段控制，缺省即开启。项目成员看到的效果与项目设置里的开关见[环境配置：setup、resume、快照与预热](/guide/projects/environment/)。
+
+## 调整全局设置
+
+不写这两段时取下面的默认值：
+
+```yaml
+# orynd.yaml（以下为默认值）
+snapshots: { enabled: true, max_age: "72h", max_depth: 16, min_setup: "10s", max_total_gb: 40, max_snapshot_gb: 10 }
+pool:      { max_total: 2, max_age: "12h", active_window: "72h" }
+```
+
+| 键 | 作用 |
+|---|---|
+| `snapshots.enabled` | 全局开关 |
+| `snapshots.max_age` | 同一条快照血统最多复用的时长 |
+| `snapshots.max_depth` | 同一条血统最多刷新的次数 |
+| `snapshots.min_setup` | setup 用时少于它时不拍快照 |
+| `snapshots.max_total_gb` | 每个 Provider 上快照缓存的总量上限 |
+| `snapshots.max_snapshot_gb` | 单个快照的大小上限 |
+| `pool.max_total` | 全局预热环境的台数上限，设成 0 即关闭预热池 |
+| `pool.max_age` | 预热环境的换新周期 |
+| `pool.active_window` | 判定项目是否活跃的时间窗口 |
+
+`snapshots.max_total_gb` 与 `snapshots.max_snapshot_gb` 也可以在「设置 → 控制面」里覆盖，覆盖优先于 `orynd.yaml`，存在 `oryn.db` 里，改完不用重启；点「恢复」删除覆盖后回落到文件里的值。每个键的类型、取值范围见 [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/#snapshots)。
+
+## 判断快照何时生成
+
+项目环境第一次 setup 成功、且 setup 用时不少于 `min_setup` 时，控制面在它进入 ready 之前让 Provider 把磁盘存成快照：
+
+- 时机：setup 脚本跑完之后，resume 与受管服务启动之前；只在 Agent 从未在这台环境上运行过时才拍。
+- 内容：只有 setup 的产物，没有会话、附件、浏览器 Profile、Agent 的改动，也没有服务运行时写下的东西。
+- Docker 驱动用 `docker commit`，期间容器暂停几秒；sysbox 类型要先停机再拍，见[带 Docker 的环境（Sysbox）](/admin/backends/sysbox/)。
+- 认领来的预热环境已经跑过服务，不发布快照。
+
+之后同一项目、同一 Provider、同一类型的新环境从快照启动。`orbd` 会 `git fetch` 基线：HEAD 没变就跳过 setup、只跑 resume；HEAD 变了就在快照的环境上把 setup 增量重跑一遍，成功后发布新快照。所以项目的 setup 脚本要能重复执行。
+
+## 判断快照何时失效
+
+出现下列任一情况，旧快照退役，下一个环境从基础镜像全新 setup：
+
+- 项目的仓库、分支、setup 脚本、env 模式密钥与降级模型 key 变化（只看名字与修改时间）。
+- Provider 的基础镜像变化。重建环境镜像（`make image`）会让该 Provider 上的全部快照失效。
+- 新的基线改动了仓库里的 `.oryn/setup`、`.agents/setup`、`.oryn/services.yaml` 或 `.amp/services.yaml`；内容、可执行位、符号链接目标任一变化都算。
+- 旧 HEAD 不是新基线的祖先（force push 等情况）。浅克隆的项目会多 fetch 一次历史来判断祖先关系，仍判断不了的按不是快进处理。
+- 同一条血统复用满 `max_age`，或刷新满 `max_depth` 次。
+
+环境是否真的从快照启动，以 Provider 的上报为准；环境里的程序无法让控制面误判、借此续期。
+
+## 控制快照的磁盘占用
+
+快照是 Provider 宿主上名为 `oryn-snap-…` 的镜像。
+
+- 单个快照超过 `max_snapshot_gb` 就直接作废，不会挤掉别的项目。不写时取 10 与 `max_total_gb` 中较小的一个。
+- `max_total_gb` 约束每个 Provider 上可用（ready）快照相对基础镜像多占的字节之和。超过上限时按最近使用时间退役其它项目的快照，新发布的那份总是保留。
+- 退役的快照如果还有环境在用，它的镜像归那台环境，不计入上限，等环境删掉后由回收器删除。因此宿主上快照镜像的实际占用可能暂时高于 `max_total_gb`，多出的部分正是这些环境引用着的镜像。
+- 用 `docker image prune -a` 删掉未被容器引用的快照不影响使用：下一个环境会退回基础镜像并重新发布快照。
+
+dispatch 驱动只按引用名识别基础镜像（`ref:<镜像>`）：镜像内容变了而引用名不变时，旧快照要等 72 小时上限才退役。它也不上报快照大小，上面两个配额对它不起作用。见[用脚本接入其它后端（dispatch）](/admin/backends/dispatch/)。
+
+## 清除可疑的快照
+
+<Aside type="caution">
+怀疑某次 setup 把不该留的东西（后门、泄露的凭据）拍进了快照时，立即清除该项目的快照。
+</Aside>
+
+```bash
+oryn project snapshots ls <项目名或 id>               # 列出快照（含 building / ready / retired）
+oryn project snapshots rm <项目名或 id>               # 作废全部类型的快照
+oryn project snapshots rm <项目名或 id> --type <类型>  # 只作废该环境类型的快照
+```
+
+`rm` 会把可用的和正在构建的快照一起作废，之后的环境从基础镜像全新 setup。快照镜像的配置里不保留环境令牌等环境变量。在 Web 界面里，项目设置页有「项目快照」开关与快照表。
+
+## 设置项目的预热台数
+
+在项目设置里把「预热 orb」设成 1–3，控制面就为这个项目保持这么多台已完成 setup、还没绑定线程的环境，新线程直接认领，跳过创建与 setup。
+
+- 全局最多 `pool.max_total` 台。
+- 预热环境常驻占用内存（空闲时照常被冻结），每 `max_age`（12 小时）换新一次。
+- 以下情况不预热：项目既没有仓库也没有 setup 脚本；`active_window`（72 小时）内没有新线程；Provider 离线；上一台预热环境的 setup 失败后 1 小时内。
+- 请求了浏览器 Profile 的线程不认领预热环境。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 同一血统的最长复用时间 | `max_age`，缺省 72 小时 |
+| 同一血统的刷新次数 | `max_depth`，缺省 16 次 |
+| 每个 Provider 的快照缓存 | `max_total_gb`，缺省 40 GB |
+| 单个快照 | `max_snapshot_gb`，缺省取 10 与 `max_total_gb` 中较小的一个 |
+| 每个项目的预热台数 | 1–3 |
+| 全局预热台数 | `pool.max_total`，缺省 2 |
+| 预热环境换新周期 | `pool.max_age`，缺省 12 小时 |
+
+## 相关
+
+- [环境配置：setup、resume、快照与预热](/guide/projects/environment/)
+- [`oryn project` 命令参考](/reference/cli/project/)
+- [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/)
+- [带 Docker 的环境（Sysbox）](/admin/backends/sysbox/)
+- [`.oryn/setup` 与 `.oryn/resume`](/reference/project-files/setup-resume/)

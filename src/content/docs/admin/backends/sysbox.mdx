@@ -1,0 +1,132 @@
+---
+title: 带 Docker 的环境（Sysbox）
+description: 用 sysbox 运行时让执行环境里能跑 Docker，并开启环境与控制面之间 link 的 TLS。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '### 带 Docker 的 orb（sysbox）'
+  - file: docs/deploy.md
+    section: '### orb link 的 TLS'
+  - file: internal/config/config.go
+verified: 6fe0baf13191
+sidebar:
+  order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Agent 在执行环境（orb）里有免密 sudo，所以 Oryn 不支持 `--privileged`（那等于把宿主 root 交给 Agent），也不做 rootless DinD（它要求放宽 seccomp、AppArmor 与 `/proc` 掩码，放宽的部分正好落在 Agent 手里）。需要在环境里跑 Docker 时，用 [sysbox](https://github.com/nestybox/sysbox)：容器里的 root 映射到宿主上的非特权 uid，不放宽宿主侧的任何防线。本页的步骤都在 Docker Provider 所在的宿主上做。
+
+## 满足前提
+
+1. 按[网络隔离与加固](/admin/install/network-isolation/)给环境建隔离网桥。
+2. 按下一节开启 link 的 TLS。
+
+sysbox 类型的环境要保留 `NET_ADMIN` / `NET_RAW`，供内层 dockerd 建网桥、写 iptables。这两项能力只在容器自己的网络命名空间里生效，但足以在共用的网桥上做 ARP 欺骗，`enable_icc=false` 挡不住。所以环境与控制面之间的 link 必须走 TLS，否则一台 sysbox 环境可以截获、篡改同网桥上其它环境的 link，包括令牌、env 密钥和提示词。
+
+## 开启 link 的 TLS
+
+link 默认是明文 HTTP，跑在宿主网桥上。开启 TLS 后，控制面在数据目录的 `orb-tls/` 下生成一张自签 CA 和服务端证书，并另开一个 TLS 监听。新建的环境在创建时随环境变量 `ORYN_ORB_CA_PEM` 拿到这张 CA，`orbd` 只信任它，不信任系统根证书。
+
+```yaml
+# orynd.yaml
+orb_tls:
+  listen: ["172.17.0.1:7643"]   # docker0（或专用网桥）的网关地址；证书的 SAN 会自动包含这些 IP
+  hosts: []                      # 额外写进证书的主机名（可选）
+# provider.yaml
+orb_url: "https://172.17.0.1:7643"
+```
+
+开启后，已存在的环境仍走原来的明文监听：`orbd` 的 `ORYN_URL` 和 CA 是在创建容器时写进环境变量的，停机再恢复、冻结再唤醒都只换令牌，不会改成 TLS。只有删掉重建的环境才改走 TLS，线程会在新环境里继续，转录不丢。
+
+要关掉面向网桥的明文监听，先把开启 TLS 之前创建的环境都删掉重建，否则它们会失去连接，直到被删除重建。下面的命令输出里 `ORYN_URL` 是 `http://` 的就是这类环境：
+
+```bash
+docker inspect <orb> --format '{{range .Config.Env}}{{println .}}{{end}}' | grep ORYN_URL
+```
+
+Provider 在另一台主机、经反代用正式证书连控制面时，不需要开启它：`orb_url` 写 `https://` 的主域名（如 `https://oryn.example.com`），`orbd` 用系统根证书校验。
+
+服务端证书有效期 1 年。到期前 30 天，或 `listen` / `hosts` 变化时，控制面在启动时自动重签；CA 不变，已下发 CA 的环境不受影响。
+
+<Aside type="caution">
+删除 `orb-tls/` 目录会生成新的 CA，之后要重建所有环境。
+</Aside>
+
+键的取值规则见 [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/#orb_tls)。
+
+## 安装 sysbox
+
+- Ubuntu / Debian：用官方 deb 包。
+- Arch：用 AUR 的 `sysbox-ce-bin`。
+
+然后启动服务：
+
+```bash
+systemctl enable --now sysbox
+```
+
+## 向 Docker 注册 runtime
+
+把下面两项合并进 `/etc/docker/daemon.json`：
+
+```json
+{
+  "live-restore": true,
+  "runtimes": { "sysbox-runc": { "path": "/usr/bin/sysbox-runc", "runtimeArgs": ["--no-kernel-check"] } }
+}
+```
+
+这两项都可以用 `systemctl reload docker` 热加载，不需要重启 Docker。建议先单独加 `live-restore` 并 reload 一次，之后任何需要重启 Docker 的改动都不会停掉正在运行的容器。
+
+只在创建 sysbox 容器失败时：Docker ≥ 29.5 在某些宿主上需要在 `daemon.json` 里合并 `"features": {"time-namespaces": false}`，这一项必须重启 Docker。在 Docker 29.9.2 加内核 7.3 上实测不需要。
+
+<Aside type="caution" title="要明确接受的风险">
+- `--no-kernel-check` 关掉了 sysbox 唯一的内核兼容性检查。sysbox 不认识较新的内核版本号，不带它就无法启动；但 sysbox-fs / sysbox-mgr 以 root 运行，在未经验证的内核上是新增的宿主攻击面。条件允许时，把 sysbox 类型放在单独的 Provider 宿主（例如一台虚拟机）上，不与控制面同机，并用 sysbox 支持矩阵内的内核。
+- `live-restore` 对宿主上所有容器生效：升级 dockerd / containerd / runc 后，正在运行的容器仍沿用旧 shim，安全修复要等容器重建才生效。升级后请重建环境（停机再恢复即可）。
+- sysbox 包会写入 `/usr/lib/sysctl.d/99-sysbox-sysctl.conf`，在全宿主范围调高 `kernel.pid_max` 等上限。Docker 驱动因此给每个环境加 `--pids-limit`（`docker.pids_limit`，默认 4096）。
+</Aside>
+
+## 在 provider.yaml 里加 sysbox 类型
+
+在 `docker.types` 里加一个类型：
+
+```yaml
+docker:
+  types:
+    dind: { cpus: 4, memory: "8g", runtime: sysbox-runc, nested_docker: true }
+```
+
+| 键 | 规则 |
+|---|---|
+| `runtime` | 只接受空（Docker 默认）或 `sysbox-runc` |
+| `nested_docker` | 为 `true` 时环境内由 `orbd` 托管 dockerd；要求 `runtime` 为 `sysbox-runc` |
+| `docker.pids_limit` | 所有类型的 `docker run --pids-limit`；缺省 4096，0 = 不限，不能为负 |
+
+Provider 启动时会预检：配置的 runtime 不在 `docker info` 里就拒绝启动。写了 `docker.types` 就只有你写的类型，不与默认的 `small` / `medium` / `large` 合并，需要保留它们时一并写出。全部键见 [`provider.yaml` 配置参考](/reference/config/provider-yaml/#docker)。
+
+## 确认环境内的 Docker 可用
+
+这种类型的环境里，dockerd 由 `orbd` 托管，日志在 `~/.cache/oryn/logs/dockerd.log`；setup 会等它能接受请求后再开始。setup 里拉取的镜像会随项目快照保存，拍快照前 `orbd` 会停掉内层正在运行的容器。普通类型的环境里也有 `docker` 命令，但连不上守护进程。
+
+## 了解快照带来的重启
+
+sysbox 自己挂着容器的 overlay，Docker 在容器运行或暂停时 commit 不到上层内容（`docker info` 里 `Native Overlay Diff: false` 的宿主都是这样）。所以 Provider 对 sysbox 容器拍快照时，先停机，再 commit，然后重新启动。
+
+- 项目快照发生在 setup 之后、进入 ready 之前，用户感知不到。
+- 对 sysbox 环境做「连环境 fork」时，源环境会重启一次，里面运行中的进程和内层容器会被中断。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 每个环境的进程数上限 | `docker.pids_limit`，缺省 4096 |
+| link TLS 服务端证书有效期 | 1 年，到期前 30 天自动重签 |
+
+## 相关
+
+- [网络隔离与加固](/admin/install/network-isolation/)
+- [快照与预热池](/admin/backends/snapshots-pool/)
+- [接入 Docker Provider](/admin/install/docker-provider/)
+- [选择执行后端](/guide/environments/backends/)
+- [`provider.yaml` 配置参考](/reference/config/provider-yaml/)

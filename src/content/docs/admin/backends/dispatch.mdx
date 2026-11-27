@@ -1,0 +1,125 @@
+---
+title: 用脚本接入其它后端（dispatch）
+description: dispatch 驱动的配置键、脚本收到的环境变量、操作名、输出与退出码约定、超时与令牌轮换义务。
+type: reference
+sources:
+  - file: docs/deploy.md
+    section: '### dispatch 驱动的脚本契约（令牌轮换部分）'
+  - file: docs/deploy.md
+    section: '### orb 令牌'
+  - file: docs/deploy.md
+    section: '### 项目快照'
+  - file: internal/providerrt/dispatch.go
+  - file: internal/providerrt/driver.go
+  - file: internal/providerrt/runner.go
+  - file: internal/config/config.go
+  - file: internal/jobs/jobs.go
+  - file: schema/openapi.yaml
+verified: 6fe0baf13191
+sidebar:
+  order: 5
+---
+
+`driver: dispatch` 的 Provider 不自己创建执行环境（orb），而是对每个任务执行一次你提供的脚本，由脚本在你的后端上创建、冻结、删除机器。契约与 Amp 的 dispatch 同形。实现以 [`internal/providerrt/dispatch.go`](https://github.com/Lynricsy/Oryn/blob/main/internal/providerrt/dispatch.go) 为准。
+
+## 配置键
+
+| 键 | 必填 | 说明 |
+|---|---|---|
+| `driver` | 是 | 写 `dispatch` |
+| `dispatch.script` | 是 | 每个任务执行的脚本路径。`driver: dispatch` 时为空则 Provider 拒绝启动 |
+| `docker.image` | 否 | 任务未指定镜像时作为 `ORB_IMAGE` 传给脚本；也用作基础镜像身份 `ref:<镜像>`。缺省 `oryn-orb:dev` |
+| `docker.types` | 否 | 只用于向控制面声明环境类型；不写时取默认的 `small` / `medium` / `large` |
+| `docker.default_type` | 否 | 声明的默认类型，缺省 `medium` |
+
+`url`、`token_file`、`orb_url` 与其它驱动相同，见 [`provider.yaml` 配置参考](/reference/config/provider-yaml/#dispatch)。
+
+## 声明的能力
+
+| 项 | 值 |
+|---|---|
+| 冻结 | 支持 |
+| 项目快照 | 支持 |
+| Agent 沙箱 | 不声明 |
+| 停机预览 | 不声明 |
+| 基础镜像身份 | `ref:<docker.image>`；`docker.image` 为空时为未知，控制面对该 Provider 不启用项目快照 |
+| 磁盘采样目录 | `/` |
+
+## 调用方式
+
+| 项 | 约定 |
+|---|---|
+| 参数 | 无；输入全部经环境变量传递 |
+| 环境 | Provider 进程自身的环境，加上下表各变量 |
+| 进程组 | 脚本在独立的进程组中运行 |
+| 输出 | stdout 与 stderr 合并作为任务输出，只保留尾部 64 KiB 上报给控制面 |
+| 退出码 | 0 = 成功；非 0 = 任务失败 |
+| 超时 | 单个任务 5 分钟；超时时整个进程组被 `SIGKILL` |
+| 后代进程 | 脚本退出后仍有后代进程占着 stdout / stderr 时，Provider 至多再等 5 秒就返回；退出码为 0 仍算成功，输出里追加一行 `oryn: dispatch 脚本已退出，但有后代进程仍持有输出管道（不再等待）`。后台启动的 `orbd` 应把输出重定向到日志文件 |
+| 幂等 | 驱动实现必须幂等；上报结果失败时由控制面的认领租约重排任务 |
+
+## 环境变量
+
+每个任务都会设置全部变量；与本次操作无关的为空串。
+
+| 变量 | 有值的操作 | 内容 |
+|---|---|---|
+| `ORB_OPERATION` | 全部 | 操作名，见下一节 |
+| `ORB_ID` | 除 `delete_snapshot` 外 | 环境 id；`delete_snapshot` 可能为空 |
+| `ORB_IMAGE` | `spawn` | 要启动的镜像；任务未指定时取 `docker.image` |
+| `ORB_SNAPSHOT_ID` | `spawn`、`snapshot`、`delete_snapshot` | 快照 id。`spawn` 时非空表示应从该快照创建机器 |
+| `ORB_SNAPSHOT_OPTIONAL` | `spawn` | `1`：`ORB_SNAPSHOT_ID` 对应的快照不存在时退回 `ORB_IMAGE` 启动，不算失败；`0`：快照必须存在，否则应失败 |
+| `ORB_TYPE` | `spawn` | 环境类型名 |
+| `ORB_PAUSE_MODE` | `pause` | `freeze` 或 `stop` |
+| `ORYN_ORB_TOKEN` | `spawn` | 本次的环境令牌（`oot_` 开头） |
+| `ORYN_ORB_CA_PEM` | `spawn` | 控制面开启 `orb_tls` 时为 link 用的 CA（PEM），否则为空 |
+| `ORYN_URL` | `spawn` | 机器内 `orbd` 连接控制面的地址；取 `orb_url`，未设置时等于 `url` |
+
+## 操作名
+
+| `ORB_OPERATION` | 含义 |
+|---|---|
+| `spawn` | 创建或唤醒机器（包括从冻结状态停机前的解冻），并让机器内的 `orbd` 用本次令牌连接；每次入队都会轮换令牌 |
+| `pause` | 冻结（`ORB_PAUSE_MODE=freeze`）或停机（`ORB_PAUSE_MODE=stop`）机器 |
+| `snapshot` | 把机器存成快照 `ORB_SNAPSHOT_ID` |
+| `delete_snapshot` | 删除快照 `ORB_SNAPSHOT_ID` |
+| `delete` | 删除机器 |
+| `set_network` | 切换 Agent 沙箱的网络，只发给声明了沙箱能力的 Provider；dispatch 驱动不声明，不会收到 |
+
+## spawn 的义务
+
+| 情形 | 脚本必须做的事 |
+|---|---|
+| 机器不存在 | 创建，并以分离方式启动 `orbd run`，环境里带 `ORYN_URL`、`ORYN_ORB_ID`、`ORYN_ORB_TOKEN` |
+| 机器来自快照 | 启动 `orbd` 之前把 `$HOME/.oryn/orb-token` 覆盖为本次令牌或删除它，否则 `orbd` 会读到源环境的令牌 |
+| 机器已存在（解冻、开机或已在运行） | 恢复运行后，以 `orbd` 的用户原子写入 `$HOME/.oryn/orb-token`：内容为 `ORYN_ORB_TOKEN`，权限 0600，先写临时文件再 `mv`；然后向 `orbd` 发 `SIGHUP` |
+| `ORYN_ORB_CA_PEM` 非空 | 新建机器时把它原样作为同名环境变量传给 `orbd`；`orbd` 只信这一张 CA，不用系统根证书 |
+| `ORB_SNAPSHOT_ID` 非空 | 在输出里单独打一行快照标记，见下一节 |
+
+令牌轮换的原因：每次入队 spawn 都会轮换环境令牌，旧令牌立即失效，现有 link 同时被关闭。`orbd` 每次拨号前优先读 `$HOME/.oryn/orb-token`，收到 `SIGHUP` 时立即重连。
+
+## 输出里的快照标记
+
+| 输出行 | 含义 |
+|---|---|
+| `ORYN_SNAPSHOT_USED=1` | 机器确实从快照创建 |
+| `ORYN_SNAPSHOT_USED=0` | 退回了基础镜像 |
+
+- 只在 `spawn` 时解析；整行（去掉首尾空白）等于上面之一才算，多行时以最后一行为准；最后一行可以没有换行。
+- 控制面按这一行判断快照血统，不信环境自报。
+- 没有这一行视为来源未知：这台环境不继承快照血统，也不发布任何新快照，快照本身不退役。不打标记的脚本，项目快照最多被复用到 `snapshots.max_age`，期间不会增量刷新。
+
+## 快照的限制
+
+| 项 | 行为 |
+|---|---|
+| 基础镜像变化 | 只按引用名识别；镜像内容变了而引用名不变时，旧快照靠 72 小时的复用上限退役 |
+| 快照大小 | 不上报，`snapshots.max_total_gb` 与 `snapshots.max_snapshot_gb` 对它不起作用 |
+
+## 相关
+
+- [`provider.yaml` 配置参考](/reference/config/provider-yaml/)
+- [`oryn provider` 命令参考](/reference/cli/provider/)
+- [快照与预热池](/admin/backends/snapshots-pool/)
+- [令牌、设备与单向信任](/security/tokens-trust/)
+- [选择执行后端](/guide/environments/backends/)

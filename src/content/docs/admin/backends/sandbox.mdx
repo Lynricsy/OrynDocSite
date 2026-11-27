@@ -1,0 +1,154 @@
+---
+title: 启用 Agent 沙箱
+description: 设置控制面的沙箱配额，并在 Docker 或 Firecracker Provider 上开启沙箱，让环境里的 Agent 能开零凭据、用完即焚的沙箱。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '### Agent 沙箱（M30）'
+    under: '## 2. 控制面配置 `/etc/oryn/orynd.yaml`'
+  - file: docs/deploy.md
+    section: '### Agent 沙箱（M30）'
+    under: '## 5. 本机 Docker provider'
+  - file: docs/deploy.md
+    section: '### Agent 沙箱（M30）'
+    under: '## 12. Firecracker provider（M11b）'
+  - file: deploy/docker/oryn-sbx-net.sh
+verified: 6fe0baf13191
+sidebar:
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+执行环境（orb）里的 Agent 可以开零凭据、用完即焚的沙箱，用法见 [Agent 沙箱](/guide/environments/sandboxes/)。控制面默认允许沙箱，但 Provider 默认不提供：只有在 `provider.yaml` 里显式开启的 Provider 才参与调度，所以不改 Provider 配置就没有任何行为变化。启用沙箱要做三件事：确认控制面的配额，重建镜像或根盘，在至少一个 Provider 上开启。
+
+## 设置控制面的配额
+
+控制面的设置在 `orynd.yaml` 的 `sandbox:` 下：
+
+```yaml
+sandbox: { enabled: true, max_per_orb: 2, max_total: 8, idle: "30m", max_lifetime: "12h", default_backend: "kvm" }   # 以上为默认值
+```
+
+| 键 | 类型 | 默认 | 校验 | 含义 |
+|---|---|---|---|---|
+| `enabled` | bool | `true` | — | 关掉后新建沙箱回 `sandbox_disabled`，Agent 的系统提示里也不再有沙箱指引 |
+| `max_per_orb` | int | `2` | ≥ 1 | 每台所有者的环境同时在用（创建中与就绪）的沙箱上限 |
+| `max_total` | int | `8` | ≥ `max_per_orb` | 全局在用的沙箱上限 |
+| `idle` | 时长 | `30m` | 5m–4h | 缺省空闲超时；Agent 创建时可另设 5–240 分钟 |
+| `max_lifetime` | 时长 | `12h` | ≥ `idle`，≤ 72h | 最长寿命硬上限，绝对 TTL 与续期都不能越过它 |
+| `default_backend` | string | `kvm` | `kvm` 或 `docker` | 创建时省略 `backend` 先找哪种后端的 Provider，没有再找另一种 |
+
+校验失败时控制面拒绝启动，错误以 `sandbox.` 加键名开头。见 [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/#sandbox)。
+
+## 重建镜像或根盘
+
+沙箱里跑的是 Provider 镜像或根盘自带的 `orbd`，开启前要重建：
+
+- Docker Provider：`make image`。
+- Firecracker Provider：`make image && make fc-artifacts`，再用 `install` 换上新的 `rootfs.ext4`，见下文。
+
+镜像或根盘没更新时，创建沙箱会失败，原因：
+
+```text
+orbd in the provider image has no sandbox mode; rebuild the orb image
+```
+
+已有环境里的 Agent 要等这台环境重建后才有沙箱工具。
+
+## 在 Docker Provider 上开启
+
+`backend: docker` 的沙箱是一个容器：`none` 模式以 `--network none` 启动，完全没有网卡；`egress` 模式只接入一个专用 Docker 网络。控制通道不走网卡：Provider 在宿主上为每台沙箱建一个 unix socket 中继，转发到 `orb_url` 的 host:port。沙箱固定使用 `docker.image`，不用项目快照。
+
+### 建沙箱网络与防火墙
+
+在 Oryn 源码根目录以 root 执行，脚本幂等：
+
+```bash
+sudo deploy/docker/oryn-sbx-net.sh up      # 拆除：… down（网络上还有容器时 docker 拒绝删除）
+```
+
+| 环境变量 | 默认 | 说明 |
+|---|---|---|
+| `ORYN_SBX_NETWORK` | `oryn-sbx` | Docker 网络名，须与 `docker.sandbox.network` 一致 |
+| `ORYN_SBX_BRIDGE` | `oryn-sbx0` | 网桥接口名 |
+| `ORYN_SBX_SUBNET` | `172.29.0.0/24` | 网段，不要与宿主上别的网络重叠 |
+
+`up` 建一个关闭了容器间互通（`enable_icc=false`）的 bridge 网络，并插两组 iptables 规则：
+
+- `INPUT -i oryn-sbx0 -j DROP`：沙箱到宿主一律丢弃。link 走挂进容器的 unix socket，不需要放行任何端口。
+- `DOCKER-USER -i oryn-sbx0 -d <网段> -j DROP`，网段为 `10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`100.64.0.0/10`、`169.254.0.0/16`：沙箱到内网与链路本地一律丢弃。`DOCKER-USER` 链不存在时脚本先建出来并挂进 `FORWARD`。
+
+<Aside type="caution">
+这些 iptables 规则不随重启持久化，Docker 网络本身会保留。没装规则时 `egress` 沙箱能访问宿主与内网；`none` 模式不受影响。
+</Aside>
+
+开机后要在 Provider 启动前重跑一次 `up`。例如把脚本装到 `/usr/local/lib/oryn/oryn-sbx-net.sh`，再给 `oryn-provider.service` 加一个 drop-in：
+
+```ini
+[Service]
+ExecStartPre=/usr/local/lib/oryn/oryn-sbx-net.sh up
+```
+
+也可以用你自己的防火墙持久化方式。
+
+### 在 provider.yaml 里开启
+
+```yaml
+docker:
+  # image、types 等保持不变
+  sandbox:
+    enabled: true
+    network: "oryn-sbx"          # egress 模式接入的 docker 网络；enabled 时必填
+    dns: ["1.1.1.1"]             # 可选：egress 模式的 --dns，每项须是 IP
+    socket_dir: "/run/oryn-sbx"  # 可选：中继 socket 目录，须是绝对路径；缺省即此值
+```
+
+`enabled: false`（缺省）时其余三项不校验。开启时 `network` 为空、`socket_dir` 不是绝对路径或 `dns` 里有非 IP 的项，都会让 Provider 拒绝启动，错误以 `docker.sandbox.` 开头。`oryn provider preflight` 与启动时会检查 `docker network inspect <network>` 能成功（失败时提示先运行 `oryn-sbx-net.sh up`），并建出 `socket_dir`（权限 0700）。
+
+### Docker 沙箱的运行方式
+
+- 每台沙箱的中继是 `<socket_dir>/<orbId>/link.sock`（目录 0755、socket 0666），整个目录只读挂进容器的 `/run/oryn-link`；容器内的 `orbd` 以 `ORYN_LINK_VIA=unix:/run/oryn-link/link.sock` 拨号，TLS 与令牌仍是 `orbd` 与控制面端到端。每台沙箱同时至多 8 条中继连接。删除沙箱时连目录一起删。
+- Provider 重启后，按容器标签 `oryn-sandbox` / `oryn-sandbox-link` 为仍在运行的沙箱重建中继，沙箱里的 `orbd` 随之自动重连。
+- 与普通环境的差别：带标签 `oryn-sandbox=<none|egress>`；不加 `--add-host host.docker.internal:host-gateway`；不追加 `docker.extra_run_args`（它是给环境的，可能带 `--network` 等）；seccomp 恒用内置 profile。
+- 规格取 `docker.types`（`--type` 省略时取 `default_type`），带 `runtime: sysbox-runc` 的类型照样可用。
+- 切换网络是对这个专用网络执行 `docker network disconnect -f` / `docker network connect`；创建时为 `none` 的容器没有可接入的网卡，不能开网。
+
+## 在 Firecracker Provider 上开启
+
+```yaml
+# /etc/oryn/provider-fc.yaml
+firecracker:
+  # 其余保持不变
+  sandbox: { enabled: true }
+```
+
+不需要额外的网络配置：沙箱的 link 走 vsock。guest 里的 `orbd` 连 `CID 2 : 5006`，Firecracker 把连接转到 jail 里的 `v.sock_5006`，Provider 再以 TCP 转发到 `orb_url` 的 host:port，TLS 与令牌仍是 `orbd` 与控制面端到端。`none` 模式的 VM 不建 tap、guest 里没有网卡；`egress` 模式与普通环境一样有 tap，受[宿主网络](/admin/backends/firecracker/)一节的 nft 规则约束。切换网络就是把这台 VM 的 tap `up` / `down`。
+
+重装含新 `orbd` 的根盘：先 `make image && make fc-artifacts`，再按 [Firecracker Provider](/admin/backends/firecracker/) 的「构建并安装产物」一节用 `install` 把新的 `rootfs.ext4` 换上去。
+
+<Aside type="caution">
+根盘要换成新文件，不能原地覆盖：运行中 VM 的基础盘是它的硬链接。换根盘后旧的项目快照全部失效。
+</Aside>
+
+- 沙箱 VM 与普通环境共用槽位，计入 `limits.max_vms` 与 `limits.max_memory_mb`；满额时创建回 `capacity`。规格取 `firecracker.types`。
+- Provider 重启后为仍在运行的沙箱 VM 重建 vsock 中继，沙箱里的 `orbd` 随之自动重连。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 每台环境同时在用的沙箱 | `sandbox.max_per_orb`，缺省 2 |
+| 全局同时在用的沙箱 | `sandbox.max_total`，缺省 8 |
+| 缺省空闲超时 | `sandbox.idle`，缺省 30 分钟，可设 5 分钟–4 小时；Agent 创建时可另设 5–240 分钟 |
+| 最长寿命 | `sandbox.max_lifetime`，缺省 12 小时，不超过 72 小时 |
+| 每台 Docker 沙箱的中继连接 | 至多 8 条 |
+| Firecracker 沙箱 VM | 计入 `limits.max_vms` 与 `limits.max_memory_mb` |
+
+## 相关
+
+- [Agent 沙箱](/guide/environments/sandboxes/)
+- [接入 Docker Provider](/admin/install/docker-provider/)
+- [Firecracker Provider](/admin/backends/firecracker/)
+- [`provider.yaml` 配置参考](/reference/config/provider-yaml/)
+- [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/)
