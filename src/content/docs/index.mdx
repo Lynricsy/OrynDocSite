@@ -1,6 +1,29 @@
 ---
 title: Oryn 文档
+description: Oryn 的使用、部署与参考文档。
 template: splash
 hero:
-  tagline: 自托管的 Coding Agent 工作台。
+  tagline: 自托管的 Coding Agent 工作台：每个线程一台隔离环境，在浏览器、桌面、手机与终端里接续同一份工作。
+  image:
+    alt: Oryn 工作台：左侧是线程列表，中间是对话与工具卡，右侧是工程面板
+    light: ../../assets/shots/readme/hero-light.webp
+    dark: ../../assets/shots/readme/hero-dark.webp
+  actions:
+    - text: 快速开始
+      link: /start/quickstart/
+      icon: right-arrow
+    - text: 认识 Oryn
+      link: /start/what-is-oryn/
+      variant: minimal
 ---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+<CardGrid>
+	<LinkCard title="我要部署一套" description="组件构成、安装顺序与可选组件。" href="/admin/overview/" />
+	<LinkCard title="已有实例，想上手" description="新建项目，发出第一条消息，查看改动。" href="/start/first-thread/" />
+	<LinkCard title="核心概念" description="线程、环境、Provider、全局助手等名词。" href="/start/concepts/" />
+	<LinkCard title="命令行参考" description="oryn、orynd、orbd 的全部命令与参数。" href="/reference/cli/" />
+	<LinkCard title="配置参考" description="orynd.yaml 的全部键、默认值与约束。" href="/reference/config/orynd-yaml/" />
+	<LinkCard title="安全模型" description="代码与凭据交给 Oryn 时的边界。" href="/security/overview/" />
+</CardGrid>
