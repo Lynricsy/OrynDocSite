@@ -11,6 +11,7 @@ sources:
   - file: web/src/components/thread/UiRequestCard.tsx
   - file: web/src/components/thread/Dialogs.tsx
   - file: web/src/lib/slash.ts
+  - file: internal/notify/actions.go
   - file: web/src/i18n/locales/zh-CN.json
 verified: 6fe0baf13191
 sidebar:
@@ -44,7 +45,7 @@ import Shot from '@/components/Shot.astro';
 
 可以一键作答的提问，在行下方直接列出选项按钮，点一下即作答。行内显示的是问题原文的纯文本，不解析反引号等标记，所以工具审批里看到的就是会执行的命令。
 
-能一键作答的是只需选一项的提问：单选、是 / 否确认，以及只有一道单选题的问卷。需要输入文字、输入密钥、多选、多道题、表单与计划审批，都要打开线程作答。
+能一键作答的是只需选一项的提问：单选、是 / 否确认，以及只有一道单选题的问卷，且只有 2–3 个选项、每个选项不超过 24 个字且不换行。需要输入文字、输入密钥、多选、多道题、表单与计划审批，或选项超出上述限制时，都要打开线程作答。
 
 问题已在别处（另一台设备、通知或命令行）作答时，按钮撤回并提示「已在别处作答」。同一线程还有更早的未答提问时，行内换成那一条。
 

@@ -66,7 +66,7 @@ oryn thread new --box workbench "检查磁盘占用"
   oryn boxes deploy --discard-box-changes
   ```
 
-用 `--move` 把应用改绑到另一个仓库时，两边历史不相干，无法与 box 上的代码比对，必须同时加 `--discard-box-changes`。
+用 `--move` 把应用改绑到另一个仓库时，box 上的代码无法与新仓库比对；部署因 box 上有改动被拒时，确认那里没有要保存的内容后加 `--discard-box-changes` 重试。
 
 <Aside type="caution">
 `--discard-box-changes` 会丢掉 box 上没有推送的改动。先确认这些改动已经推送或不再需要。

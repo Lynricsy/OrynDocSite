@@ -22,7 +22,7 @@
 
 ## 不写进来的东西
 
-- 里程碑标签（如「（M30）」）、`plan-m*.md`、验收脚本、CI 与签名密钥、发版流程、`.dev/` 路径。
+- 里程碑标签（如「（M30）」）、`plan-m*.md`、验收脚本、CI 与签名密钥、发版流程、Oryn 开发者用的 `.dev/` 路径（快速开始照抄 README 的 `.dev/quickstart-*` 命令除外：它们面向用户，在仓库检出目录里运行）。
 - 内部函数名与 RPC 名，除非是读者要敲的。
 - `docs/deploy.md` 第 16 节（作者本机的生产实例），`docs/push-gateway.md` 的「部署清单」。
 - 任何真实主机名、域名、IP。示例域名统一用 `oryn.example.com` 与 `*.orb.example.com`。

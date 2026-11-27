@@ -37,7 +37,7 @@ import { Aside } from '@astrojs/starlight/components';
 | `.oryn/setup`（兼容 `.agents/setup`） | 新环境首次创建时执行一次 | 20 分钟 |
 | `.oryn/resume`（兼容 `.agents/resume`） | 每次冻结后唤醒时执行；从项目快照启动的新环境也直接运行它 | 最长等待 10 秒，超过后转入后台继续运行，总上限 10 分钟 |
 
-仓库里的脚本须有可执行位。`.oryn/<名>` 不存在时才回退到 `.agents/<名>`。
+仓库里的脚本须是带可执行位的普通文件；`.oryn/<名>` 不满足时回退到 `.agents/<名>`。
 
 在 `setup` 里增装系统包用 `pacman`，见[开发镜像里有什么](/guide/environments/dev-image/)：
 
