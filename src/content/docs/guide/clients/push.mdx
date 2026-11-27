@@ -1,0 +1,147 @@
+---
+title: 手机推送
+description: 让 Android 与 iOS App 在后台也收到需要你处理的通知，选择推送通道，并在通知上直接作答。
+type: how-to
+sources:
+  - file: docs/mobile.md
+    section: '## 推送'
+  - file: docs/mobile.md
+    section: '### 官方推送网关 FCM（gms 包默认）'
+  - file: docs/mobile.md
+    section: '### UnifiedPush（foss 包；gms 包可选）'
+  - file: docs/mobile.md
+    section: '### 在通知上作答'
+  - file: docs/mobile.md
+    section: '### 通知样式与头像'
+  - file: docs/mobile.md
+    section: '### 锁屏'
+  - file: docs/mobile.md
+    section: '### 国产 ROM 与省电'
+  - file: docs/mobile.md
+    section: '### APNs 推送与 Notification Service Extension'
+  - file: docs/features.md
+    section: '### 移动'
+  - file: docs/deploy.md
+    section: '### 移动 App 推送'
+  - file: web/src/pages/settings/MobilePushCard.tsx
+  - file: web/src/pages/settings/NotificationsSettings.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 6
+---
+
+import Requires from '@/components/Requires.astro';
+import { Aside } from '@astrojs/starlight/components';
+
+手机推送让 App 在后台或已关闭时也能收到线程跑完、等你回答之类的提醒。服务器只在没有任何设备正在看该线程时生成通知；App 在前台时只显示应用内提示，不弹系统通知。点通知经 `oryn://thread/<id>` 直达线程。
+
+<Requires ids={['push']} />
+
+推送的开关与状态在 App 的「设置 → 通知与预算」，「此设备」分组的「后台推送」一行。
+
+## 推送走哪条路
+
+服务器只有两条推送路径，两条都是 RFC 8291 端到端加密：
+
+| 客户端 | 通道 | 你要做什么 |
+|---|---|---|
+| iOS App | 官方推送网关 → Apple 推送服务（APNs） | 配对后自动启用，允许系统通知授权即可 |
+| Android `gms` 包 | 官方推送网关 → Firebase 云消息（FCM），默认 | 配对后自动启用，允许系统通知授权即可 |
+| Android `foss` 包；`gms` 包可选 | UnifiedPush（复用 Web Push） | 在手机上装一个分发器（推荐 ntfy），再在 App 里启用 |
+
+官方推送网关缺省为 `https://push.oryn.best`。自部署的服务器默认就用它，服务器上不需要任何 Google 或 Apple 凭据：APNs key 与 Firebase 服务账号只在网关上。
+
+## 使用官方推送网关
+
+`gms` 包与 iOS App 配对后自动启用推送：弹出系统通知授权框，允许后状态显示「经官方推送网关与 Firebase 云消息（FCM）接收推送」（iOS 上为「经官方推送网关与 Apple 推送服务（APNs）接收推送」）。不需要另装分发器。
+
+授权由手机掌握：App 先向网关证明持有这台手机的推送令牌，再取得针对这台服务器的授权，并登记到服务器。没有被手机明确授权的服务器无法给它推送。关闭推送或改用 UnifiedPush 时，App 直接在网关上吊销授权，不依赖服务器。
+
+服务器管理员关掉了官方推送网关时，推送卡片提示「服务器关闭了官方推送网关（push.gateway.url 为空），这台设备收不到推送。请服务器管理员开启，或在 Android 上改用 UnifiedPush。」
+
+## 改用 UnifiedPush
+
+`foss` 包只能用 UnifiedPush；`gms` 包也可以改用它。
+
+1. 在手机上安装 ntfy（F-Droid、Google Play 或 GitHub 均可），打开一次，并允许它后台运行与发通知。
+2. 可选：自建 ntfy 服务器（手机与 Oryn 服务器都要能访问），在 ntfy App 的“设置 → 默认服务器”填它。不自建就用 `ntfy.sh`；分发服务器只看得到密文。私有 ntfy 开了鉴权时，要放行匿名发布到 UnifiedPush 主题：
+
+   ```bash
+   ntfy access '*' 'up*' write-only
+   ```
+
+3. 在 Oryn App 的「设置 → 通知与预算」点「启用推送」（`gms` 包点「改用 UnifiedPush」），按系统提示允许通知。状态显示经 ntfy 接收推送即为成功。
+
+手机上没有可用的分发器时，推送卡片提示「这台设备没有 Google 推送服务，需要先安装一个 UnifiedPush 分发器（推荐 ntfy），装好后点「重试」。」
+
+`gms` 包要切回官方推送网关，点「改用官方推送网关（FCM）」。在两个包之间覆盖安装后，需要重新「启用推送」。
+
+UnifiedPush 不需要服务器做任何配置。
+
+## 端到端加密
+
+- 启用推送时，App 生成自己的接收端密钥（P-256 与 16 字节 auth），私钥加密保存在本机，随订阅一起登记。
+- 经官方推送网关时，FCM / APNs 载荷里只有密文，网关与 Google、Apple 都只见密文。App 用同一份解密代码解开后走同一套通知流程；格式不对或解不开的消息直接丢弃。
+- 经 UnifiedPush 时，消息是端到端加密的 Web Push，分发服务器只看得到密文。
+- iOS 上由通知扩展在通知显示前解密；任何一步失败或超时只显示一条“有新通知”的占位。
+
+## 在通知上直接作答
+
+Agent 的提问只需点一个选项时（工具审批的“批准 / 拒绝”、是 / 否确认、2–3 个短选项的单选），通知下方直接带按钮，正文是完整的问题，工具审批会写出要执行的命令。问题太长会被截断时不带按钮，点通知打开线程作答。
+
+- 点按钮不打开 App：后台用设备令牌提交，期间通知显示“正在提交…”并收起按钮。成功显示“已作答”，4 秒后消失。
+- 已在别处作答时显示「已在别处作答」。
+- 网络错误、超时或服务器 5xx 时保留原文与按钮，并加一行“作答失败，点按打开 Oryn”，可以再点；令牌失效等其它错误加同样一行但收起按钮。
+- 任何状态下点通知本身都打开该线程。
+- 请求在网页、另一台设备或 Telegram 上作答（或被取消）后，服务器发一条撤回推送，App 撤掉那条仍带按钮的通知。撤回没送到时，点过期的按钮得到「已在别处作答」。
+
+<Aside type="caution">
+Android 上点作答按钮前必须先解锁手机。批准工具命令等于在你的设备上执行操作，不能让拿到手机的人不解锁就点掉。
+</Aside>
+
+## 锁屏
+
+通知设为私密：锁屏上只显示不含内容的公开版“Oryn · 线程有更新”，解锁后才看到线程标题与回复摘要。系统设置里选了“锁屏时隐藏敏感内容”时，连公开版也按系统规则处理。
+
+## 通知上的头像
+
+Android 通知按对话样式显示发送者头像：
+
+| 通知来源 | 头像 |
+|---|---|
+| 普通线程 | 线程标题卡图标与线程色；没有标题卡图标时为 Oryn 品牌标 |
+| 主线与助手对话线程 | 全局助手头像，未设置时为默认标记 |
+| 没有线程的系统通知（预算告警、定时等） | Oryn 品牌标 |
+
+## 国产 ROM 与省电
+
+MIUI / HyperOS、ColorOS、OriginOS、EMUI / HarmonyOS 等系统会在后台杀掉分发器。对 ntfy 开启“自启动”、把电池策略设为“无限制”、在多任务界面锁定。用 FCM 时，这些策略对 Oryn 本身影响较小。
+
+Oryn App 不常驻后台：转到后台 30 秒后断开实时连接，回到前台立即重连并补齐。
+
+## 离线期间的通知
+
+- FCM 对离线设备最多存 100 条消息，超出时全部丢弃并在上线后通知 App。App 随即补拉最近 50 条通知，把未读（待答的还要未作答）且没显示过的逐条弹出，同一线程合并成一条；补拉失败时只弹一条不含内容的“Oryn 有新通知”。
+- iOS 上，App 离线期间被 APNs 丢弃的通知不补发。
+- UnifiedPush 更换端点时，App 在后台自动重新登记（要联网，指数退避，最多 8 次），不用等你打开 App。
+
+## 管理员需要知道的
+
+- 服务器在 `orynd.yaml` 的 `push.gateway.url` 里指定官方推送网关，缺省 `https://push.oryn.best`；写空串 `""` 关闭网关，此时 Web Push 与 UnifiedPush 照常。
+- 只有手机登记了网关订阅时服务器才会访问网关，没开推送的服务器不产生任何对外流量。出站需要能访问网关的 443 端口。
+- 自己构建的 App（自己的应用标识或 Firebase 项目）要自建推送网关，见[移动推送与自建推送网关](/admin/components/push-gateway/)。
+
+## 限制
+
+- FCM 为离线设备最多保留 100 条消息；超出后 App 补拉最近 50 条。
+- 作答成功的提示 4 秒后消失。
+- 带作答按钮的提问最多 2–3 个短选项。
+
+## 相关
+
+- [Android App](/guide/clients/android/)
+- [iOS App](/guide/clients/ios/)
+- [通知渠道](/guide/automation/notifications/)
+- [移动推送与自建推送网关](/admin/components/push-gateway/)
+- [`push-gateway.yaml` 配置参考](/reference/config/push-gateway-yaml/)

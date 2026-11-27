@@ -1,0 +1,92 @@
+---
+title: 浏览器：登录、设备与外观
+description: 在浏览器里用 Passkey 或恢复码登录，批准与吊销其它设备，并调整主题、壁纸与语言。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 4. 启动控制面并初始化'
+  - file: README.md
+    section: '## 全平台客户端'
+  - file: docs/desktop.md
+    section: '## 首次运行与配对'
+  - file: web/src/pages/settings/registry.ts
+  - file: web/src/pages/settings/AccountSettings.tsx
+  - file: web/src/pages/settings/DevicesSettings.tsx
+  - file: web/src/pages/settings/AppearanceSettings.tsx
+  - file: web/src/pages/AuthPages.tsx
+  - file: web/src/components/PairApproval.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 1
+---
+
+浏览器是 Oryn 唯一不需要安装的客户端，也是唯一能使用 Passkey 的客户端：桌面 App、手机 App 与 `oryn` CLI 都要在浏览器里批准后才能接入。服务器必须走 HTTPS。桌面与移动 App 配对后加载的也是服务器上的同一套 Web 界面，所以本页的设置在各客户端里位置相同。
+
+## 首次登录
+
+服务器第一次启动、还没有所有者时，管理员从控制面日志里取得形如 `https://oryn.example.com/setup#token=ost_…` 的初始化链接（见[启动与初始化](/admin/install/first-start/)）。在浏览器里打开它：
+
+1. 页面标题为「初始化 Oryn」。填「Passkey 名称」，点「创建 Passkey」，按浏览器或系统的提示完成注册。
+2. 页面显示「恢复码」，提示「请妥善保存这 10 个恢复码。每个只能用一次，之后不会再显示。」可以复制全部恢复码。
+3. 保存好后点「已保存，继续」，进入首页。
+
+之后在新的浏览器里打开 Oryn 会进入「登录」页，点「使用 Passkey 登录」。
+
+## 用恢复码登录
+
+Passkey 不可用时（例如换了电脑），在「登录」页点「改用恢复码」，在「恢复码」里填一个未用过的恢复码，点「用恢复码登录」。验证通过后进入「重新注册 Passkey」页，提示「恢复码已验证。为这台设备注册一个新的 Passkey。」，在这里为当前设备注册新的 Passkey。
+
+## 管理 Passkey 与恢复码
+
+「设置 → 账户与设备」的「Passkey」分组列出已注册的 Passkey，可以添加、改名和删除；「恢复码」分组显示剩余数量，可以「重新生成」，现有的恢复码随即全部失效。
+
+- 新增、删除 Passkey 和重新生成恢复码之前，要先用 Passkey 验证一次，验证 5 分钟内有效。
+- 这三项操作只能在浏览器里进行。桌面 App 和手机 App 的内嵌页面用不了 Passkey，会提示「新增、删除 Passkey 和重新生成恢复码需要在浏览器里操作」，并给出「在浏览器中打开」。
+- 删除一个 Passkey 后，用它登录的其它浏览器会立即退出。
+
+## 批准新设备
+
+桌面 App、手机 App 和 `oryn login` 都通过配对接入：设备上显示一个 8 位配对码（形如 `ABCD-EFGH`，10 分钟内有效），由你在已登录的浏览器里批准。批准有两个入口：
+
+- 打开设备给出的配对地址（`https://oryn.example.com/pair`）。没有登录时页面提示「请先登录再批准设备。」，登录后回到这一页。
+- 在「设置 → 账户与设备」的「批准配对」里操作。
+
+输入配对码后点「查看」，页面列出发起设备的「设备」「IP」「UA」「发起时间」与「过期」。确认这是你本人刚刚发起的配对，再点「批准」。配对码无效或已过期时提示「配对码无效或已过期」。
+
+桌面 App 与手机 App 不能批准其它设备的配对：它们的会话由设备令牌换来，服务器拒绝用它签发新设备。在 App 的设置页里，「批准配对」一行只显示「配对需要在浏览器里用 Passkey 登录后批准。」和「在浏览器中打开」。
+
+在浏览器的「设置 → 账户与设备」里还有「用手机扫码连接」：二维码内容是服务器地址，在手机 App 的连接页点「扫码」可以预填地址；批准仍要输入 App 显示的配对码。手机端的完整流程见 [Android App](/guide/clients/android/)。
+
+## 吊销设备
+
+「设置 → 账户与设备」的「设备」分组列出所有设备，标明类型（「CLI」「桌面」「移动」「浏览器扩展」）与最近活动时间，当前设备带「当前」标记。点某台设备的「吊销」并确认后，该设备显示「已吊销」。
+
+被吊销的桌面 App 或手机 App 会删除本地令牌并回到连接页；手机 App 同时关闭推送。
+
+## 退出登录
+
+在浏览器里，「设置 → 账户与设备」的「连接与会话」分组有「此浏览器的登录」，点「退出登录」后需要重新登录。桌面 App 与手机 App 在这个位置显示的是「当前服务器」与「更换服务器…」。
+
+## 调整外观
+
+「设置 → 外观」包含以下几项：
+
+| 设置 | 可选值 | 说明 |
+|---|---|---|
+| 「明暗」 | 「跟随系统」「浅色」「深色」 | |
+| 「主题色」 | 「青碧」「钴蓝」「堇紫」「莓红」「狐橙」「石墨」 | |
+| 「壁纸」 | 「极光」「Tahoe 波」「纸纹」「自定义」 | 「自定义」可上传、更换、移除图片 |
+| 「全局语言」 | 简体中文、English | 跨设备同步，用于界面显示，以及 Agent 自动生成标题和工具调用意图的语言 |
+| 「重置界面布局」 | — | 侧栏收起、线程右侧面板宽度、信息卡片折叠与桌面画面缩放恢复默认；只影响这台设备，不动主题、壁纸与语言 |
+
+明暗、主题色与壁纸只保存在当前设备的浏览器里，壁纸图片会自动做强模糊处理；语言则在所有设备间同步。iOS App 在这一页另有「App 图标」，见 [iOS App](/guide/clients/ios/)。
+
+## 相关
+
+- [启动与初始化](/admin/install/first-start/)
+- [桌面 App](/guide/clients/desktop/)
+- [Android App](/guide/clients/android/)
+- [命令行 oryn](/guide/clients/cli/)
+- [令牌、设备与单向信任](/security/tokens-trust/)
+- [设置页索引](/reference/ui/settings/)

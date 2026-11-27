@@ -1,0 +1,134 @@
+---
+title: 桌面 App
+description: 在 Windows、macOS、Linux 上安装 Oryn 桌面 App，完成配对，并使用托盘、系统通知、深链接、全局快捷键与自动更新。
+type: how-to
+sources:
+  - file: docs/desktop.md
+    section: '# 桌面 App（Tauri 2）'
+  - file: docs/desktop.md
+    section: '## 安装'
+  - file: docs/desktop.md
+    section: '## 首次运行与配对'
+  - file: docs/desktop.md
+    section: '## 日常使用'
+  - file: docs/desktop.md
+    section: '### 已知限制'
+  - file: docs/desktop.md
+    section: '## 自动更新'
+  - file: docs/features.md
+    section: '### 桌面'
+  - file: web/src/pages/settings/AccountSettings.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 2
+---
+
+import Shot from '@/components/Shot.astro';
+
+桌面 App 是 Windows、macOS、Linux 上的 Oryn 客户端。App 本身只带一个连接页，配对完成后主窗口加载所连服务器自己的 Web 界面，所以界面总与服务器同一版本，服务器升级不需要同步升级 App。与浏览器相比，它多了托盘、系统通知、`oryn://` 深链接和全局快捷键。
+
+- 产品名 `Oryn`，应用标识 `com.lynricsy.oryn`，二进制 `oryn-desktop`（`oryn` 是 CLI），深链接协议 `oryn://`。
+- 设备令牌只存在于 App 的 Rust 进程和系统凭据库里，网页代码拿不到它。
+- 服务器必须走 HTTPS。App 需要联网，连不上时停在连接页自动重连。
+
+<Shot id="site/desktop-app" alt="macOS 上的 Oryn 桌面 App：左上角是系统红绿灯，与侧栏品牌行同一行，主窗口显示线程页与右侧信息面板" />
+
+## 安装
+
+从 [GitHub Releases](https://github.com/Lynricsy/Oryn/releases) 的 `v<版本>` 下载。服务端、桌面与移动 App 在同一个 Release 里；`0.1.0` 及更早的预发布在 `desktop-v<版本>`。
+
+| 平台 | 安装包 |
+|---|---|
+| Windows x64 | `Oryn_<版本>_x64-setup.exe`（NSIS）或 `.msi`。包没有代码签名，SmartScreen 会提示“未知发布者”，选“仍要运行”。 |
+| macOS Apple Silicon | `Oryn_<版本>_aarch64.dmg` |
+| macOS Intel | `Oryn_<版本>_x64.dmg` |
+| Linux x64 | `.deb`、`.rpm` 或 `.AppImage` |
+
+macOS 上已签名并公证的包可以直接打开；没配 Apple 证书的构建是 ad-hoc 签名，首次需在 Finder 里右键“打开”。
+
+### Linux 运行时依赖
+
+- WebKitGTK 4.1、GTK 3、librsvg。
+- 托盘需要 `libayatana-appindicator`（Debian / Ubuntu：`libayatana-appindicator3-1`；Arch：`libayatana-appindicator`）。
+- 令牌存储使用 Secret Service（GNOME Keyring、KWallet 或 KeePassXC）。
+- AppImage 需要 FUSE 2；没有 FUSE 时设 `APPIMAGE_EXTRACT_AND_RUN=1` 运行。
+
+## 首次运行与配对
+
+1. 在连接页的「服务器地址」填服务器地址，例如 `oryn.example.com`，点「连接」。不写协议时按 `https://` 处理，路径部分会被忽略。只有 `localhost`、`127.0.0.1`、`[::1]` 可以用 `http://`，但 Linux 上实际仍需 HTTPS。
+2. App 在系统浏览器里打开 `https://oryn.example.com/pair`，连接页显示「配对码」（如 `ABCD-EFGH`，10 分钟内有效）。
+3. 在浏览器里用 Passkey 登录，输入配对码并批准（见[批准新设备](/guide/clients/web/#批准新设备)）。App 自动收到设备令牌，存入系统凭据库（macOS 钥匙串、Windows 凭据管理器、Linux Secret Service），随后进入 Web 界面。
+
+也可以从命令行预填地址：
+
+```bash
+oryn-desktop --server https://oryn.example.com
+```
+
+Linux 上没有 Secret Service 时，令牌写入 `~/.config/com.lynricsy.oryn/credentials.json`，权限 0600，与 CLI 的凭据文件是同一种做法。连接页和「设置 → 桌面应用」会提示「未找到系统凭据库，令牌以仅本人可读的文件保存。」之后这台机器一直使用文件存储，不再尝试凭据库。
+
+App 里不能批准其它设备的配对。要批准配对，在浏览器里用 Passkey 登录。
+
+## 更换服务器或吊销
+
+- 更换服务器：「设置 → 账户与设备」的「更换服务器…」，或托盘菜单的“更换服务器…”。确认后 App 尽量在服务器上吊销自己，删除本地令牌，然后重启。
+- 吊销：在任何一端的「设置 → 账户与设备」里吊销这台桌面设备后，App 删除本地令牌并回到连接页。
+
+## 托盘
+
+关闭窗口时默认隐藏到托盘。要改成关闭即退出，在「设置 → 桌面应用」关掉「关闭窗口时隐藏到托盘」。
+
+托盘菜单显示待你处理和未读的线程（最多 5 条），另有“打开 Oryn”“新建线程”“检查更新…”“更换服务器…”“退出 Oryn”。有待处理或未读线程时，托盘图标带一个点。
+
+退出 App：托盘的“退出 Oryn”，或在命令行运行下面的命令，让正在运行的实例正常退出：
+
+```bash
+oryn-desktop --quit
+```
+
+## 系统通知
+
+窗口隐藏或最小化时，线程跑完、等你回答或出错会弹系统通知，点击直接打开该线程。窗口在前台时只显示应用内提示。
+
+App 没在运行时不会有桌面通知，这时由服务器上配置的其它渠道（Telegram、Web Push 等）送达，见[通知渠道](/guide/automation/notifications/)。
+
+## 深链接
+
+| 链接 | 打开 |
+|---|---|
+| `oryn://thread/<线程 id>` | 该线程 |
+| `oryn://` | 首页 |
+
+App 始终只有一个实例，再次启动或点击深链接都会唤起已运行的窗口。
+
+## 全局快捷键
+
+默认 `Control+Alt+Space`，用来显示或隐藏主窗口。在「设置 → 桌面应用」的「全局快捷键」里可以改成其它组合（格式如 `Control+Alt+K`），留空表示不注册。快捷键被别的程序占用时，设置页显示原因并保留旧值。
+
+## 其它行为
+
+- 窗口位置与大小在退出前自动保存，下次启动时恢复。
+- 网页里的下载保存到系统“下载”目录，同名文件自动编号，完成后弹一条通知。
+
+## 自动更新
+
+App 启动进入 Web 界面后检查一次更新，之后每 6 小时检查一次；托盘的“检查更新…”和「设置 → 桌面应用」的「检查更新」可以立即检查。发现新版本后在后台下载，下载完托盘和设置页出现 `重启以更新到 v<版本>`。打开「下载后自动安装并重启」时，下载完成后直接安装并重启。
+
+- 每个更新包都用 App 内置的公钥校验签名，校验失败就不安装。
+- 预发布版本（tag 带后缀，如 `v0.2.0-rc.1`）不进入更新通道。
+- Linux 的更新包只提供 AppImage。用 deb / rpm 安装的，请下载新包后用系统包管理器升级。
+
+## 已知限制
+
+- **Wayland**：全局快捷键依赖 X11 抓键，在纯 Wayland 会话里不可用（设置页会显示错误），其它功能不受影响。XWayland 下运行的 App 能否抓到键取决于合成器。
+- **GNOME 托盘**：GNOME 默认不显示托盘图标，需要装 AppIndicator 扩展。没有托盘时，可以用全局快捷键或再次启动 App 唤回窗口，也可以关掉「关闭窗口时隐藏到托盘」。
+- Linux 上缺少 `libayatana-appindicator` 时托盘不可用。此时 App 本次运行按关闭窗口即退出处理，避免窗口藏起来后找不回来。
+- 终端面板固定使用 xterm 的 DOM 渲染器（Linux 的 WebKitGTK 上 WebGL 渲染器不稳定）。
+
+## 相关
+
+- [浏览器：登录、设备与外观](/guide/clients/web/)
+- [通知渠道](/guide/automation/notifications/)
+- [升级](/admin/operations/upgrade/)
+- [启动与初始化](/admin/install/first-start/)

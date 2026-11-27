@@ -1,0 +1,161 @@
+---
+title: 命令行 oryn
+description: 取得 oryn 二进制，用设备配对登录，在终端里挂接线程，并把环境里的改动镜像到本机检出。
+type: how-to
+sources:
+  - file: README.md
+    section: '## CLI 速查'
+  - file: README.md
+    section: '## 全平台客户端'
+  - file: docs/features.md
+    section: '### 终端'
+  - file: docs/deploy.md
+    section: '## 1. 安装二进制与镜像'
+  - file: .github/workflows/release.yml
+  - file: cmd/oryn/client.go
+  - file: cmd/oryn/login.go
+  - file: cmd/oryn/thread.go
+  - file: cmd/oryn/sync.go
+verified: 6fe0baf13191
+sidebar:
+  order: 5
+---
+
+`oryn` 是 Oryn 的命令行客户端。在你的电脑上，它用设备令牌调用控制面 API：管理线程、项目、密钥与执行后端，在终端里流式查看并引导线程，或把执行环境（orb）里的改动实时镜像到本机。本页覆盖接入与两个终端专属的用法；每个命令的完整参数见[命令行参考](/reference/cli/)。
+
+## 取得二进制
+
+[GitHub Releases](https://github.com/Lynricsy/Oryn/releases) 的服务端包里带有 `oryn`：
+
+| 平台 | 包 |
+|---|---|
+| Linux x64 | `oryn-server_<版本>_linux-x64.tar.gz` |
+| Linux ARM64 | `oryn-server_<版本>_linux-arm64.tar.gz` |
+
+每个包解出一个同名目录，内含 `orynd`、`orbd`、`oryn`、`gemini-rerank`、`oryn-push-gateway` 与 `oryn-push-gateway.service`；同一 Release 里的 `oryn-server_<版本>_SHA256SUMS` 用来校验。以 Linux x64 为例：
+
+```bash
+sha256sum -c --ignore-missing oryn-server_<版本>_SHA256SUMS
+tar -xzf oryn-server_<版本>_linux-x64.tar.gz
+sudo install -m 0755 oryn-server_<版本>_linux-x64/oryn /usr/local/bin/
+```
+
+Release 里没有其它平台的 `oryn`（macOS 的包只含 `orbd`）。其它平台从源码构建，`make build` 产出 `bin/oryn`，见[安装二进制与镜像](/admin/install/binaries-and-image/)。
+
+## 登录
+
+`oryn login` 用设备配对取得令牌，与桌面 App、手机 App 的配对是同一套流程：
+
+```bash
+oryn login --url https://oryn.example.com
+```
+
+命令在标准错误输出里打印批准地址与配对码，然后等待：
+
+```text
+在已登录的浏览器中打开以下地址并批准配对：
+
+  <批准地址>
+
+配对码：<配对码>（<时间> 前有效）
+等待批准…
+```
+
+在已登录的浏览器里打开该地址，核对设备信息后批准（见[批准新设备](/guide/clients/web/#批准新设备)）。批准后命令打印 `已登录，设备 <设备名>（<设备 id>）` 并退出。设备名默认取主机名，可用 `--name` 指定。配对码过期时命令报「配对码已过期，请重新运行 oryn login」，重新运行即可。
+
+已有一枚 `odt_` 开头的设备令牌时，用 `--token` 直接写入；令牌先向控制面校验，通过后才写入。
+
+## 凭据文件的位置
+
+登录得到的地址与令牌写入凭据文件，权限总是 0600：
+
+| 系统 | 缺省位置 |
+|---|---|
+| Linux | `$XDG_CONFIG_HOME/oryn/credentials.json`；未设置 `XDG_CONFIG_HOME` 时为 `~/.config/oryn/credentials.json` |
+| macOS | `~/Library/Application Support/oryn/credentials.json` |
+
+要放到别处（例如为不同服务器各用一份凭据），设 `ORYN_CREDENTIALS` 指向凭据文件，`oryn login` 与之后的命令都读写这个文件：
+
+```bash
+export ORYN_CREDENTIALS="$HOME/.config/oryn/staging.json"
+oryn login --url https://oryn.example.com
+```
+
+同时设置了 `ORYN_API_URL` 与 `ORYN_API_TOKEN` 时，`oryn` 直接使用这两个值，不读凭据文件。完整的查找顺序见[命令行总览](/reference/cli/#凭据)。
+
+要让这台机器失去访问权，在浏览器的「设置 → 账户与设备」里吊销对应的「CLI」设备。
+
+## 在终端里挂接线程
+
+`oryn thread attach` 在终端里流式查看线程的转录，并可以实时引导、作答与审批计划：
+
+```bash
+oryn thread attach <线程>
+```
+
+挂接后，每行输入是一条消息：
+
+| 当前状态 | 输入的含义 |
+|---|---|
+| 有待答的请求 | 作答（编号或文字） |
+| 有待审批的计划 | 输入编号或选项名批准；`save <绝对路径>` 保存计划；其它文字作为修改意见发回 |
+| 其它 | 引导当前回合 |
+
+`/abort` 中断当前回合，`/quit` 退出。在终端上按 <kbd>Ctrl</kbd>+<kbd>C</kbd> 或输入 EOF 也会退出，Agent 继续运行。
+
+常用参数：
+
+| 参数 | 作用 |
+|---|---|
+| `--tail <N>` | 先打印活动分支上最近 N 条消息（缺省 10，0 = 不打印） |
+| `--all` | 先打印全部消息 |
+| `--no-input` | 不读取输入 |
+| `--exit-on-idle` | 回合结束后退出：idle → 0、awaiting_input → 3、error → 4 |
+| `--json` | 把该线程的事件原样逐行输出（NDJSON） |
+
+`--exit-on-idle` 适合在脚本里等待一个回合结束，再按退出码判断结果。
+
+## 把环境里的改动镜像到本机
+
+`oryn sync` 把线程环境里的提交与未提交改动实时镜像到本机的一份干净检出，方便你用本机的编辑器、测试与工具查看 Agent 的工作。在本机的 git 检出目录里运行：
+
+```bash
+oryn sync <线程>
+```
+
+- 镜像期间，本地 `HEAD` 游离在环境的提交上，工作区与环境的工作区一致；每 3 秒轮询一次，可用 `--interval` 调整。
+- 按 <kbd>Ctrl</kbd>+<kbd>C</kbd>（或进程收到 SIGTERM）后，还原到原分支、原提交。
+- 每次覆盖本地文件前都会复核：本地文件被改动时停止且不覆盖。退出时有本地改动则不还原，以退出码 3 结束。保存好需要的改动后，用下面的命令丢弃改动并还原：
+
+  ```bash
+  oryn sync --restore --discard
+  ```
+
+- 本地被忽略的文件（如 `.env`）与环境里的文件路径冲突时拒绝同步（退出码 3），不会覆盖。
+- 上一次镜像中断、没有还原时，`oryn sync --restore` 按状态文件还原；有本地改动时拒绝。
+
+要把环境里的结果一次性落到本机，而不是持续镜像：
+
+```bash
+oryn sync <线程> --apply
+```
+
+`--apply` 在能快进时挂到与环境同名的分支，并带上未提交改动，然后退出，不写状态、不还原。加 `--detach` 则总是游离检出。
+
+`oryn sync` 要求当前目录在 git 仓库里且检出干净。线程没有环境时报 `线程没有 orb`。
+
+| 退出码 | 含义 |
+|---|---|
+| 0 | 成功 |
+| 1 | 运行或接口错误 |
+| 2 | 前置条件不满足（不在仓库、检出不干净、有未还原的状态） |
+| 3 | 本地改动或被忽略文件冲突 |
+
+## 相关
+
+- [命令行总览](/reference/cli/)
+- [`oryn login`](/reference/cli/login/)
+- [`oryn thread`](/reference/cli/thread/)
+- [`oryn sync`](/reference/cli/sync/)
+- [浏览器：登录、设备与外观](/guide/clients/web/)
+- [环境变量](/reference/env-vars/)

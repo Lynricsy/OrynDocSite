@@ -1,0 +1,62 @@
+---
+title: iOS App
+description: iOS App 当前的分发状态、已有的界面与功能，以及推送的工作方式。
+type: how-to
+sources:
+  - file: docs/mobile.md
+    section: '### 已知限制'
+  - file: docs/mobile.md
+    section: '## 附录 A：iOS'
+  - file: docs/mobile.md
+    section: '### APNs 推送与 Notification Service Extension'
+  - file: docs/features.md
+    section: '### 移动'
+  - file: docs/features.md
+    section: '### 原生壳'
+  - file: README.md
+    section: '## 全平台客户端'
+  - file: web/src/pages/settings/AppIconPicker.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+iOS App 与桌面、Android 客户端共用一套 Tauri 2 工程：App 本身只带配对连接页，配对后加载所连服务器自己的 Web 界面。本页说明它目前能做什么、还缺什么。
+
+<Aside>
+iOS App 目前只经 TestFlight 内部测试分发，尚未完成真机验收。没有公开的下载渠道。
+</Aside>
+
+## 已有的界面与功能
+
+- **iOS 26 原生界面**：线程页头（侧栏钮、标题胶囊、视图钮）与底栏是原生 Liquid Glass 控件，底栏是系统 `UITabBar`，随下沉式侧栏的卡片开合；视图菜单是系统菜单。
+- **连接页扫码**：连接页可以用相机扫电脑浏览器里「用手机扫码连接」的二维码预填服务器地址；输入区可以拍照添加附件。
+- **App 图标**：在「设置 → 外观」的「App 图标」里可在「黑白」与「品牌色」之间切换。图标跟随系统的浅色、深色与着色外观，切换后 iOS 会弹出一条系统提示。
+- 配对、吊销与外观设置与其它客户端相同，见[浏览器：登录、设备与外观](/guide/clients/web/)。
+
+## 推送如何送达
+
+iOS 只有一条推送通道：服务器经官方推送网关（`https://push.oryn.best`）转给 Apple 推送服务（APNs）。配对后 App 自动启用推送，弹出系统通知授权框；启用后推送卡片显示「经官方推送网关与 Apple 推送服务（APNs）接收推送」。
+
+- 网关发来的通知只带密文。App 的通知扩展在通知显示前用本机密钥解密，填上真实标题、正文、线程归组与发送者头像；任何一步失败或超时，只显示一条“有新通知”的占位。
+- App 离线期间被 APNs 丢弃的通知不补发。
+- 服务器管理员把官方推送网关关掉后，这台设备收不到推送。iOS 没有 UnifiedPush 可换。
+
+推送的整体机制、通知上作答与锁屏行为见[手机推送](/guide/clients/push/)。
+
+## 尚未提供
+
+以下能力在 iOS 上尚未完成：
+
+- 系统分享扩展（从其它 App“分享 → Oryn”）。
+- Universal Links。
+- APNs 推送与通知扩展、钥匙串令牌存储、通信通知头像的真机验收，以及 iPhone / iPad 真机验收。
+
+## 相关
+
+- [手机推送](/guide/clients/push/)
+- [Android App](/guide/clients/android/)
+- [移动推送与自建推送网关](/admin/components/push-gateway/)

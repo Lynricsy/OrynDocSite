@@ -1,0 +1,133 @@
+---
+title: Android App
+description: 选择 foss 或 gms 安装包，下载并校验签名，与服务器配对，并处理省电策略与已知限制。
+type: how-to
+sources:
+  - file: docs/mobile.md
+    section: '# 移动 App（Android；iOS 预留）'
+  - file: docs/mobile.md
+    section: '## 两种安装包'
+  - file: docs/mobile.md
+    section: '## 安装与校验'
+  - file: docs/mobile.md
+    section: '## 首次运行与配对'
+  - file: docs/mobile.md
+    section: '### 国产 ROM 与省电'
+  - file: docs/mobile.md
+    section: '## 其它能力'
+  - file: docs/mobile.md
+    section: '### 已知限制'
+  - file: .github/workflows/release.yml
+  - file: .github/workflows/mobile.yml
+  - file: web/src/pages/settings/AccountSettings.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Android App 与桌面 App 是同一个 Tauri 2 工程。App 本身只带一个连接页，配对完成后加载所连服务器自己的 Web 界面，所以界面总与服务器同一版本。手机宽度下线程页是单栏，对话与各面板是同级视图，由页头右上角的视图菜单切换。
+
+- 应用标识 `com.lynricsy.oryn`，最低 Android 13（API 33），目标 API 37；深链接协议 `oryn://`。
+- 设备令牌只存在于 App 的 Rust 进程和 Android Keystore 加密的私有存储里，网页代码拿不到它。
+- 服务器必须走 HTTPS，只有 `localhost` / `127.0.0.1` 允许明文。App 的网络栈只信任 Mozilla 根证书，私有 CA 签发的服务器证书不受支持。
+
+## 选择安装包
+
+两个包的区别在推送通道：
+
+| 包 | 推送通道 | 适合 |
+|---|---|---|
+| `foss` | UnifiedPush（需要在手机上装一个分发器，推荐 ntfy） | 所有设备，App 里没有任何 Google 依赖 |
+| `gms` | 默认经官方推送网关走 FCM，配对后自动启用；可在设置里改用 UnifiedPush | 装有 Google Play 服务、不想另装分发器的手机 |
+
+两个包的应用标识相同、用同一把密钥签名，可以互相覆盖安装；覆盖后需在 App 里重新「启用推送」。推送的配置见[手机推送](/guide/clients/push/)。
+
+## 下载
+
+从 [GitHub Releases](https://github.com/Lynricsy/Oryn/releases) 的 `v<版本>` 下载。服务端、桌面与移动 App 在同一个 Release 里；`0.1.0` 及更早的预发布在 `mobile-v<版本>`。
+
+APK 按 CPU 架构拆分，每个包各有三个文件，按手机的架构选一个：
+
+```text
+Oryn_<版本>_android-foss-arm64-v8a.apk
+Oryn_<版本>_android-foss-armeabi-v7a.apk
+Oryn_<版本>_android-foss-x86_64.apk
+Oryn_<版本>_android-gms-arm64-v8a.apk
+Oryn_<版本>_android-gms-armeabi-v7a.apk
+Oryn_<版本>_android-gms-x86_64.apk
+```
+
+Release 里的 `.aab` 是 Google Play 商店格式，只作留档，不用于直接安装。
+
+App 内没有自更新。可以用 [Obtainium](https://github.com/ImranR98/Obtainium) 订阅本仓库，只匹配你选用的 APK 资产，由它提示更新。
+
+## 校验签名证书
+
+安装前用 Android SDK build-tools 里的 `apksigner` 查看签名证书：
+
+```bash
+apksigner verify --print-certs Oryn_<版本>_android-foss-arm64-v8a.apk | grep 'SHA-256'
+```
+
+输出必须与发布证书的 SHA-256 指纹一致：
+
+```text
+BA:70:32:16:4A:27:BE:B9:AB:D6:AE:53:D2:19:E7:36:F9:37:A7:DF:46:96:AE:23:67:28:A4:95:1A:B8:0B:31
+```
+
+<Aside type="caution">
+指纹不同说明这不是官方发布密钥签出的包，不要安装。
+</Aside>
+
+## 配对
+
+1. 在连接页填服务器地址（如 `oryn.example.com`，不写协议按 `https://`），或点「扫码」扫电脑浏览器「设置 → 账户与设备」里「用手机扫码连接」的二维码。二维码内容是 `oryn://pair?server=<服务器>`，用系统相机扫也会打开 App。
+2. 扫码与链接只预填地址：连接页显示「连接到这台服务器？」和大字主机名，看清地址后点「连接」才发起配对。链接谁都能发，恶意服务器可以直接批准配对，所以必须由你确认。
+3. 连接页显示「配对码」（如 `ABCD-EFGH`，10 分钟内有效）。App 不会自动打开浏览器，以免盖住配对码。任选一种方式批准：
+   - 手机浏览器里有 Passkey：点「复制配对码并打开浏览器」，登录后粘贴配对码并批准，再点「返回 Oryn App」。
+   - 手机上没有 Passkey：到已登录的电脑上「设置 → 账户与设备」的「批准配对」输入同一个配对码批准。
+4. App 收到设备令牌后存入 Keystore，随后进入 Web 界面。
+
+批准页面的细节见[批准新设备](/guide/clients/web/#批准新设备)。App 里不能批准其它设备的配对。
+
+## 更换服务器或吊销
+
+- 更换服务器：「设置 → 账户与设备」的「更换服务器…」。
+- 吊销：在任何一端的「设置 → 账户与设备」吊销这台手机后，App 关闭推送、删除本地令牌并回到连接页。
+
+## 设置省电策略
+
+MIUI / HyperOS、ColorOS、OriginOS、EMUI / HarmonyOS 等系统会在后台杀掉 UnifiedPush 分发器。对 ntfy 开启“自启动”、把电池策略设为“无限制”、在多任务界面锁定。用 FCM 时，这些策略对 Oryn 本身影响较小。
+
+Oryn App 本身不常驻后台、不持有唤醒锁：转到后台 30 秒后断开实时连接，回到前台立即重连并补齐。清单里的 `WAKE_LOCK` 权限来自 UnifiedPush 连接器，只在处理每条推送的那一刻短暂持有。
+
+## 手机上的其它能力
+
+| 能力 | 说明 |
+|---|---|
+| 深链接 | `oryn://thread/<线程 id>` 打开该线程，`oryn://open` 打开首页，`oryn://pair?server=<服务器>` 预填服务器地址并等你确认 |
+| 系统分享 | 在任意 App 里“分享 → Oryn”：文本进入新建线程框；图片与文件先上传为附件再预填，单个不超过 100 MiB，最多 20 个 |
+| 附件 | 输入区的回形针选文件，相机图标直接拉起系统相机拍照 |
+| 下载 | 附件与文件面板的下载交给系统下载管理器，保存到“下载”目录；同名文件另存为“名字 (1).扩展名”，不覆盖已有文件 |
+| 外链 | 其它站点的链接在系统浏览器里打开 |
+| 终端 | 触屏按键条有 Esc / Tab / 粘滞 Ctrl / 方向键；“输入行”开关打开一个普通输入框，可用输入法、联想与系统粘贴，回车发送整行 |
+
+返回键在根页面结束界面，进程留在后台，下次打开回到原来的页面；从“最近任务”划掉后下次打开是冷启动，按已存的令牌直接进入，不需要重新配对。
+
+## 限制
+
+- 离线不可用：界面来自服务器。
+- 不启用 App Links：浏览器里的 `https://<服务器>/t/<id>` 不会直接进 App，用 `oryn://` 链接或点通知。
+- 系统 WebView 低于 111 时连接页提示“系统 WebView 版本过旧”，请在应用商店更新 Android System WebView。
+- 私有 CA 签发的服务器证书不受支持。
+- 系统分享：单个文件不超过 100 MiB，一次最多 20 个。
+
+## 相关
+
+- [手机推送](/guide/clients/push/)
+- [iOS App](/guide/clients/ios/)
+- [浏览器：登录、设备与外观](/guide/clients/web/)
+- [移动推送与自建推送网关](/admin/components/push-gateway/)
