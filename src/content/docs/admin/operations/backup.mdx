@@ -1,0 +1,117 @@
+---
+title: 备份
+description: 控制面数据目录、Hindsight 记忆服务与自建推送网关各要备份什么，丢失后会怎样，以及来源中给出的备份与恢复命令。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 2. 控制面配置 `/etc/oryn/orynd.yaml`'
+  - file: docs/deploy.md
+    section: '### 移动 App 推送'
+  - file: docs/deploy.md
+    section: '## 6. omp 配置'
+  - file: docs/deploy.md
+    section: '### 项目仓库镜像'
+  - file: docs/deploy.md
+    section: '### orb link 的 TLS'
+  - file: docs/deploy.md
+    section: '### 备份'
+  - file: docs/deploy.md
+    section: '## 15. SSH 主机与控制面网关（M18）'
+  - file: docs/protocol.md
+    section: '### 存储'
+    under: '## M5：公开分享、通知与 sync'
+  - file: docs/features.md
+    section: '#### 托管仓库'
+  - file: docs/push-gateway.md
+    section: '## 备份'
+  - file: internal/config/config.go
+  - file: internal/pushgw/config.go
+verified: 6fe0baf13191
+sidebar:
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+一套 Oryn 有三处需要备份的状态：控制面的数据目录 `data_dir`（缺省 `/var/lib/oryn`），启用记忆时的 Hindsight 数据库，以及自建推送网关时网关的数据目录。本页逐项列出要备份的内容和丢失后的后果，只写 Oryn 文档给出的命令与恢复步骤。
+
+## 备份控制面数据目录
+
+`data_dir` 里的以下内容由控制面生成，备份 `data_dir` 时都要包含：
+
+| 路径（相对 `data_dir`） | 内容 | 说明 |
+|---|---|---|
+| `oryn.db` | 控制面的 SQLite 库 | 与 `repos/` 一起备份、一起恢复，见下文 |
+| `repos/` | 外部仓库的裸镜像，以及 Oryn 托管仓库的正本 `<项目 id>.git`（目录里有标记文件 `oryn-hosted`） | 托管仓库的正本没有别的副本 |
+| `master.key` | 加密密钥库的主密钥，首次启动生成；`models.yml` 里的字面 API key 导入后存进这个密钥库 | 务必备份 |
+| `vapid.key` | Web Push 的 VAPID 私钥，首次启动生成 | 与 `master.key` 一起备份 |
+| `push-gateway.key` | 启用推送网关时生成的主机签名密钥，网关凭它识别本实例 | 删掉它等于轮换：全部网关订阅失效，App 下次进入时自动重新授权 |
+| `ssh-gateway.key` | SSH 网关的主机密钥，首次启动时生成 | 换掉之后，各执行环境（orb）与在线 Runner 在下一次下发时拿到新的 `known_hosts` 条目，不用手工处理 |
+| `orb-tls/` | 开启 `orb_tls` 时生成的自签 CA 与服务端证书 | 删除后会生成新的 CA，之后要重建所有环境 |
+
+<Aside type="caution" title="不要漏掉 repos/">
+`repos/` 不全是可再生的缓存。托管仓库的正本只在这里，备份 `data_dir` 时必须包含 `repos/`，并与 `oryn.db` 一起备份。删除项目时托管仓库随之删除，不可恢复。
+</Aside>
+
+## 恢复到旧备份后清理托管仓库
+
+`oryn.db` 与 `repos/` 要一起恢复。把库恢复到旧备份后，找不到项目行的托管仓库不会被删除：`orynd` 启动时把它移到 `<data_dir>/repos/orphaned/<项目 id>.git-<Unix 秒>`，并在日志里记一条错误。镜像的任何清理逻辑都不会删带 `oryn-hosted` 标记的目录，`orphaned/` 也不自动清理；确认不再需要后，手工删除 `orphaned/` 下对应的目录。
+
+## 备份 Hindsight 记忆
+
+启用了 [Hindsight 记忆服务](/admin/components/hindsight/)时，记忆存在 Hindsight 自己的数据库里，不在 `data_dir` 中。
+
+`hindsight-admin backup` 在一个 `REPEATABLE READ` 事务里导出整个库（bank、document、事实、实体、mental model），得到一个 zip。备份和恢复都只对 `public` schema 生效，这也是 Oryn 所用租户扩展的默认 schema。下面的 cron 条目每天 3:30 备份一次、保留 14 份，示例里 Oryn 源码目录是 `/opt/oryn`，备份目录是 `/var/backups/oryn/`：
+
+```cron
+30 3 * * * cd /opt/oryn && f=hindsight-$(date +\%F).zip && docker compose -f deploy/hindsight/compose.yaml exec -T api hindsight-admin backup /tmp/$f && docker compose -f deploy/hindsight/compose.yaml cp api:/tmp/$f /var/backups/oryn/ && docker compose -f deploy/hindsight/compose.yaml exec -T api rm -f /tmp/$f && find /var/backups/oryn -name 'hindsight-*.zip' -mtime +14 -delete
+```
+
+也可以直接对库做 `pg_dump`：
+
+```bash
+docker compose -f deploy/hindsight/compose.yaml exec -T db pg_dump -U hindsight_user -Fc hindsight_db > hindsight.dump
+```
+
+管理页的「导出」是一个只读的 bank 归档，用来在 Oryn 之外查看或迁移，不能代替备份。
+
+## 恢复 Hindsight 记忆
+
+<Aside type="caution">
+恢复会清空目标库。
+</Aside>
+
+1. 用 `docker compose cp` 把备份的 zip 放进容器。
+2. 执行 `hindsight-admin restore /tmp/<文件>.zip --yes`。
+3. 再执行一次 `hindsight-admin repair-bank --all`。
+
+换嵌入模型失败、需要退回旧模型时的恢复方式不同（保持 API 停止，在一次性容器里恢复），见 [Hindsight 记忆服务](/admin/components/hindsight/)。
+
+## 备份自建推送网关
+
+自建网关时，备份网关 `data_dir`（缺省 `/var/lib/oryn-push-gateway`）下的 `master.key` 与 `gateway.db`。两者缺一不可：没有 `master.key` 解不开库里的令牌。
+
+在线备份：
+
+```bash
+sqlite3 gateway.db ".backup gateway.bak"
+```
+
+或者停掉网关服务后，把 `gateway.db` 连同 `-wal` 文件一起拷贝。
+
+丢失这两个文件的后果有限：所有授权失效，`orynd` 下一次投递收到 410 后删除订阅，App 下次同步时重新授权。在此期间不发推送。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| cron 示例保留的 Hindsight 备份份数 | 14 |
+| Hindsight 备份与恢复覆盖的 schema | `public` |
+
+## 相关
+
+- [配置控制面](/admin/install/control-plane/)
+- [仓库镜像与托管仓库入口](/admin/components/repos/)
+- [Hindsight 记忆服务](/admin/components/hindsight/)
+- [移动推送与自建推送网关](/admin/components/push-gateway/)
+- [升级](/admin/operations/upgrade/)

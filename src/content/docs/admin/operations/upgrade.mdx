@@ -1,0 +1,180 @@
+---
+title: 升级
+description: 升级控制面与同版本的环境镜像，以及协调宿主的 omp、Provider、Runner、Hindsight 与客户端各自要做的事。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 1. 安装二进制与镜像'
+  - file: docs/deploy.md
+    section: '## 5. 本机 Docker provider'
+  - file: docs/deploy.md
+    section: '### 桌面浏览器沙箱（M8）'
+  - file: docs/deploy.md
+    section: '### 安装 omp'
+  - file: docs/deploy.md
+    section: '### 升级'
+    under: '## 8. 协调宿主（Space 与全局助手）'
+  - file: docs/deploy.md
+    section: '## 9. 统计分析（M10）'
+  - file: docs/deploy.md
+    section: '### 项目快照'
+  - file: docs/deploy.md
+    section: '### 带 Docker 的 orb（sysbox）'
+  - file: docs/deploy.md
+    section: '### 建立与启动'
+  - file: docs/deploy.md
+    section: '### 使用'
+  - file: docs/deploy.md
+    section: '### 产物'
+  - file: docs/deploy.md
+    section: '### Agent 沙箱（M30）'
+    under: '## 5. 本机 Docker provider'
+  - file: docs/deploy.md
+    section: '### Agent 沙箱（M30）'
+    under: '## 12. Firecracker provider（M11b）'
+  - file: docs/deploy.md
+    section: '### 升级'
+    under: '## 14. Hindsight 记忆服务（M16）'
+  - file: docs/features.md
+    section: '## Agent 沙箱'
+  - file: docs/features.md
+    section: '### 原生壳'
+  - file: docs/desktop.md
+    section: '## 自动更新'
+verified: 6fe0baf13191
+sidebar:
+  order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+环境镜像不随版本发布，每次升级控制面都要在同一版本的源码里重建；Runner 上的 `orbd` 要换成与 `orynd` 同版本。本页按组件列出 Oryn 文档给出的升级步骤，以及升级后已有执行环境（orb）的表现。
+
+## 升级控制面与环境镜像
+
+在源码目录检出新版本，再按首次安装时选用的来源取得二进制（二选一），最后在同一版本的源码里重建环境镜像：
+
+```bash
+git checkout v<版本>
+
+# 来源一：GitHub Release
+sha256sum -c --ignore-missing oryn-server_<版本>_SHA256SUMS
+tar -xzf oryn-server_<版本>_linux-x64.tar.gz      # ARM64 用 linux-arm64
+sudo install -m 0755 oryn-server_<版本>_linux-x64/{orynd,oryn} /usr/local/bin/
+
+# 来源二：从源码构建
+make web
+make build
+sudo install -m 0755 bin/orynd bin/oryn /usr/local/bin/
+
+make image                      # 构建环境镜像 oryn-orb:dev
+```
+
+各条命令的说明见[安装二进制与镜像](/admin/install/binaries-and-image/)。
+
+升级后的首次启动，如果统计事实行的版本与当前代码不一致，`orynd` 会在后台逐线程重算统计数据，期间统计页顶部显示「历史数据回填中」，其它功能照常。详见[统计数据的保留与重算](/admin/operations/stats-retention/)。
+
+## 升级 Provider
+
+停机环境的只读预览要求控制面与 Provider 升级到同一版本。旧版 Provider 不声明这项能力，文件面板会提示唤醒后才可浏览文件。
+
+## 重建镜像后已有环境的表现
+
+- 已存在的环境用的仍是旧镜像。Chromium 与 VS Code 随镜像发布，要定期重建镜像（`make image`）以跟进安全更新。
+- 重建环境镜像会让该 Provider 上的全部项目快照失效。
+- Chromium 与 VS Code 的沙箱只在新建的环境里启用；升级前建的旧容器退回 `--no-sandbox`。
+
+## 让已有环境用上 Agent 沙箱
+
+沙箱里跑的是 Provider 镜像（或 Firecracker 根盘）自带的 `orbd`。镜像没更新时，创建沙箱会失败，原因是 `orbd in the provider image has no sandbox mode; rebuild the orb image`。
+
+- Docker Provider：用 `make image` 重建镜像。
+- Firecracker Provider：先 `make image && make fc-artifacts`，再用 `install` 把新的 `rootfs.ext4` 换上去：
+
+  ```bash
+  sudo install -D -m 644 build/fc/vmlinux build/fc/rootfs.ext4 -t /var/lib/oryn-fc/artifacts/
+  ```
+
+<Aside type="caution">
+Firecracker 的根盘要换成新文件，不能原地覆盖。运行中 VM 的基础盘是它的硬链接，原地写会改坏这些 VM。换了根盘或内核后，旧的项目快照全部失效。
+</Aside>
+
+已有环境里的 Agent 要等这台环境的 `orbd` 升级（重建环境）后才有沙箱工具。`oryn sandbox cp` 要求两端的 `orbd` 都是新版，否则报 `orbd_outdated`。
+
+## 升级协调宿主的 omp
+
+启用了[协调宿主](/admin/components/coordinator/)时，同时替换 `orynd` 与 `/usr/local/lib/oryn/omp`，然后重启 `orynd`。omp 在新版本的源码目录里取得：
+
+```bash
+scripts/fetch-core.sh x64
+sudo install -D -m 0755 build/core/x64/omp /usr/local/lib/oryn/omp
+```
+
+`orynd` 启动时与每次拉起协调宿主前，都会核对 omp 的 sha256 与编进 `orynd` 的 `core/source.json` 是否一致。不一致时协调功能不可用，普通线程不受影响。
+
+重启后，旧的协调宿主子进程随旧 `orynd` 退出。新进程拉起前发现源文件变了，会重新复制 `<dir>/bin/omp`；omp 首次运行时把 natives 解压到 `<dir>/homes/<orb id>/.omp/natives/<版本>` 并清理旧版本。
+
+## 升级 Runner
+
+把 Runner 机器上的 `orbd` 换成与 `orynd` 同版本并重启。启动后它自动下载新的钉定版本的 Oryn Core（校验 SHA-256 后缓存在 `~/.oryn/core/<tag>/omp`，旧版本目录自动清理），并接收控制面配置。下载或校验失败时启动失败，不会回退到本机的 `omp`。
+
+从旧版 Runner 升级时，本机以前安装的 `omp` 与你自己的 `~/.omp` 配置不再被 Runner 使用。
+
+## 升级 Hindsight
+
+`deploy/hindsight/compose.yaml` 里的镜像按 digest 固定。Oryn 只对一个小版本（当前是 1.2）做过测试；Hindsight 报告的版本不在这个小版本内时，管理页状态会显示版本警告。
+
+### 补丁升级（1.2.x → 1.2.y）
+
+1. 先[备份](/admin/operations/backup/)。
+2. 把 `compose.yaml` 里 api 镜像的 digest 换成新补丁的 digest。
+3. 拉取并重启：
+
+   ```bash
+   docker compose -f deploy/hindsight/compose.yaml pull api && docker compose -f deploy/hindsight/compose.yaml up -d api
+   ```
+
+数据库迁移在启动时自动执行；管理页状态回到「正常」即完成。
+
+### 小版本升级（如 1.2 → 1.3）
+
+要等 Oryn 把测试过的小版本更新后再做，逐项检查：
+
+1. 读新版本的 release notes，重点看环境变量的改名或删除（与 `.env` 的键对照）、HTTP API（`/v1/default/banks/{bank}/memories`、`documents`、`mental-models`、`reflect`）的变化，以及标签过滤的语义。
+2. 先备份。
+3. 升级 Postgres 镜像之前，确认 pgroonga 与 pgvector 的版本仍然兼容。
+4. 换完镜像后执行 `docker compose -f deploy/hindsight/compose.yaml exec api hindsight-admin run-db-migration`，再执行 `hindsight-admin repair-bank --all --dry-run`。
+5. 在管理页确认状态正常，在任一项目线程里执行一次 recall 和 retain，并确认两个项目之间互相看不到对方的记忆。
+
+## 升级 Sysbox 宿主的容器运行时
+
+`daemon.json` 开了 `live-restore` 时，升级 dockerd、containerd 或 runc 后，正在运行的容器仍沿用旧 shim，安全修复要等容器重建才生效。升级后重建环境（停机再恢复即可）。
+
+## 客户端更新
+
+桌面端与移动端配对后加载所连服务器自身的 Web UI，服务端升级后各端界面随之更新。
+
+桌面 App 自身的更新：
+
+- App 启动进入 Web UI 后检查一次更新，之后每 6 小时检查一次；托盘和设置页可以立即检查。
+- 发现新版本后在后台下载，下载完托盘和设置页出现「重启以更新到 v」与新版本号。打开「下载后自动安装并重启」时，下载完成后直接安装并重启。
+- 每个更新包都用 App 内置的公钥校验签名，校验失败就不安装。
+- 预发布版本（tag 带后缀，如 `v0.2.0-rc.1`）不进入更新通道。
+- Linux 的更新包只提供 AppImage；用 deb 或 rpm 安装的，下载新包后用系统包管理器升级。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 桌面 App 自动检查更新的间隔 | 6 小时 |
+| Oryn 测试过的 Hindsight 小版本 | 1.2 |
+
+## 相关
+
+- [安装二进制与镜像](/admin/install/binaries-and-image/)
+- [备份](/admin/operations/backup/)
+- [协调宿主：启用全局助手与 Space](/admin/components/coordinator/)
+- [Firecracker Provider](/admin/backends/firecracker/)
+- [启用 Agent 沙箱](/admin/backends/sandbox/)
+- [在自己的机器上跑线程（Runner）](/guide/environments/runner/)
+- [桌面 App](/guide/clients/desktop/)

@@ -1,0 +1,194 @@
+---
+title: 故障排查
+description: 按现象查找原因与处理方法，覆盖控制面、协调宿主、Provider 预检、执行环境、仓库浏览、Hindsight 与 SSH 主机。
+type: reference
+sources:
+  - file: docs/deploy.md
+    section: '## 1. 安装二进制与镜像'
+  - file: docs/deploy.md
+    section: '### Agent 沙箱（M30）'
+    under: '## 2. 控制面配置 `/etc/oryn/orynd.yaml`'
+  - file: docs/deploy.md
+    section: '## 5. 本机 Docker provider'
+  - file: docs/deploy.md
+    section: '### Agent 沙箱（M30）'
+    under: '## 5. 本机 Docker provider'
+  - file: docs/deploy.md
+    section: '### 网络隔离'
+  - file: docs/deploy.md
+    section: '### git 出站策略'
+  - file: docs/deploy.md
+    section: '### 配置'
+  - file: docs/deploy.md
+    section: '### 安装 omp'
+  - file: docs/deploy.md
+    section: '### 专用账号（root 部署）'
+  - file: docs/deploy.md
+    section: '### 启动条件'
+  - file: docs/deploy.md
+    section: '### 不同环境得到的隔离'
+  - file: docs/deploy.md
+    section: '### 残余风险'
+  - file: docs/deploy.md
+    section: '### 排查'
+  - file: docs/deploy.md
+    section: '## 9. 统计分析（M10）'
+  - file: docs/deploy.md
+    section: '### 建立与启动'
+  - file: docs/deploy.md
+    section: '## 12. Firecracker provider（M11b）'
+  - file: docs/deploy.md
+    section: '### 前提'
+  - file: docs/deploy.md
+    section: '### 网络'
+  - file: docs/deploy.md
+    section: '### 配置与启动'
+  - file: docs/deploy.md
+    section: '### 行为差异'
+  - file: docs/deploy.md
+    section: '### Agent 沙箱（M30）'
+    under: '## 12. Firecracker provider（M11b）'
+  - file: docs/deploy.md
+    section: '### 部署'
+  - file: docs/deploy.md
+    section: '### 升级'
+    under: '## 14. Hindsight 记忆服务（M16）'
+  - file: docs/deploy.md
+    section: '### 换嵌入模型（reembed）'
+  - file: docs/deploy.md
+    section: '## 15. SSH 主机与控制面网关（M18）'
+  - file: docs/features.md
+    section: '### 环境自配置'
+  - file: docs/features.md
+    section: '#### 仓库浏览'
+  - file: docs/features.md
+    section: '### 收件箱与命令面板'
+  - file: docs/features.md
+    section: '## Agent 沙箱'
+  - file: cmd/orynd/admin.go
+  - file: cmd/oryn/orb_setup.go
+  - file: cmd/oryn/provider_run.go
+verified: 6fe0baf13191
+sidebar:
+  order: 4
+---
+
+下表中的每一行都来自 Oryn 的部署与功能文档。表里的错误原文照抄，`…` 是原文里省略的部分。
+
+## 诊断命令
+
+| 命令 | 在哪里运行 | 作用 |
+|---|---|---|
+| `sudo -u oryn orynd --config /etc/oryn/orynd.yaml coordinator check` | 控制面主机（root 部署去掉 `sudo -u oryn`） | 打印协调宿主的探测结论与可用性，再起一个一次性沙箱子进程逐项自检；全部通过时退出码 0。见 [`orynd` 命令参考](/reference/cli/orynd/) |
+| `oryn provider preflight --config <provider 配置文件>` | Provider 主机 | 只读取配置并运行驱动的启动前检查，逐项打印结果；`--config` 缺省 `/etc/oryn/provider.yaml`。全部通过时退出码 0，有检查项失败或配置出错时为 1。见 [`oryn provider`](/reference/cli/provider/) |
+| `oryn orb setup logs` | 执行环境（orb）内 | 显示 setup 日志末尾，缺省 200 行；`-n 0` 显示全部，`--resume` 查看 resume 日志。见 [`oryn orb`](/reference/cli/orb/) |
+| `oryn orb setup status` | 环境内 | 显示最近一次 setup 或 resume 的结果 |
+| `oryn orb setup run` | 环境内 | 重跑 setup（`--resume` 重跑 resume）并实时输出；退出码 0 成功、1 失败、2 调用错误 |
+
+运行中的协调宿主的输出在 `<coordinator.dir>/host.log`（缺省 `<data_dir>/coordinator/host.log`），超过 5 MiB 轮转为 `host.log.1`。
+
+## 控制面
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| `orynd` 拒绝启动，错误以 `sandbox.` 开头 | `orynd.yaml` 的 `sandbox:` 段校验失败 | 按 [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/)改正对应的键 |
+| `orynd` 拒绝启动，与 `stats.retention` 有关 | 保留期既不是 `0` 也不到 `24h` | 改成 `0`（永久）或至少 `24h`，见[统计数据的保留与重算](/admin/operations/stats-retention/) |
+| 启动日志记一条「控制面没有可用的 git，仓库浏览停用」 | 控制面主机没有 git，或版本低于 2.31 | 安装 git 2.31 或更高版本后重启 `orynd` |
+
+启动顺序：使用专用网桥、`listen` 里写了网桥网关地址（如 `172.30.0.1:7600`）时，`orynd` 要在 Docker 建好该网桥之后启动，例如给 `orynd.service` 加 `After=docker.service`。Firecracker 部署中 `orynd` 要监听 `172.31.255.1`，所以 `oryn-fc-net.service` 要在 `orynd` 之前启动。
+
+## 协调宿主
+
+建 Space、开助手对话时回 `409 coordinator_unavailable` 并带原因，表示下面某一条不满足；其它功能不受影响，也没有关掉沙箱的开关。原因也写在 `GET /api/v1/coordinator` 里。
+
+| 原因（或现象） | 说明 | 处理 |
+|---|---|---|
+| `omp at … does not match core/source.json` | `coordinator.omp_path`（缺省 `/usr/local/lib/oryn/omp`）的 sha256 与编进 `orynd` 的 `core/source.json` 不一致 | 在与 `orynd` 同版本的源码里用 `scripts/fetch-core.sh` 取得 omp 并重新安装；本地改过 Core、确实要用自己的构建时，设 `coordinator.verify_omp: false` |
+| `内核 Landlock ABI N < 2…` | 需要 Landlock ABI ≥ 2 | 内核 ≥ 5.19，并启用 Landlock LSM（`cat /sys/kernel/security/lsm` 里有 `landlock`） |
+| `内核 Landlock ABI N < 4 且没有网络命名空间，无法限制 TCP 出站…` | 既不能建网络命名空间，Landlock ABI 也低于 4 | 让 `orynd` 能建网络命名空间（root，或开放非特权 user namespace），或使用 ≥ 6.7 的内核 |
+| `内核 Landlock ABI N < 6、没有 PID 命名空间且沙箱与 orynd 是同一用户，无法阻止向 orynd 等同用户进程发信号…` | 没有 PID 命名空间、沙箱与 `orynd` 是同一用户，且 ABI 低于 6；Ubuntu 23.10 及以后默认的 AppArmor 会导致这种情况 | 以 root 运行 `orynd`，或放开 user namespace，或使用 ≥ 6.12 的内核 |
+| `cannot create the coordinator account …` | root 部署时 `useradd` 不存在或执行失败，例如单元带 `ProtectSystem=strict` 使 `/etc` 只读 | 手工执行一次原因里给出的 `useradd` 命令；或在 `coordinator.user` 指定一个你自己建的专用账号 |
+| `coordinator account "…" (uid N) is used by other processes (pid P); use a dedicated account` | 降权账号正被本实例以外的进程使用；`orynd` 不会去杀这些进程 | 不要指定登录用户或其它服务的账号。显式指定的账号不做清扫，残留进程要手工结束 |
+| `… is not reachable by user …` | root 部署时 `coordinator.dir` 的某一级父目录对降权账号不可进入。缺省的 `<data_dir>/coordinator` 在 0700 的 `data_dir` 下 | 把 `coordinator.dir` 移出 `data_dir`（例如 `/var/lib/oryn-coordinator`），`data_dir` 保持 0700 |
+| `出站代理端口 127.0.0.1:<port> 已被占用…` | 没有网络命名空间时，`coordinator.egress_port` 直接绑定在宿主回环上，该端口已被占用 | 换一个 `coordinator.egress_port` 后重启 `orynd`。`orynd` 运行着协调宿主时跑 `coordinator check` 也会报这一条，先停 `orynd` 再检查 |
+| 自己给 `orynd.service` 加了 `RestrictNamespaces=` 或 `SystemCallFilter=` | 前者让协调宿主退到按端口限制模式；后者挡掉 `landlock_*` 或 `seccomp` 时协调功能不可用 | 仓库里的 `deploy/systemd/orynd.service` 没有这两项限制，不用改 |
+| 协调宿主子进程 5 分钟内连续 3 次意外退出后不再拉起 | 已就绪的协调环境停在 `stopped`，等最早那次崩溃滑出 5 分钟窗口后由常驻检查再唤醒，期间发消息照常唤醒；启动中的由连接超时转为 `failed` | `failed` 的要在页面上点「重试」 |
+
+## Provider 预检
+
+`oryn provider preflight` 逐项打印检查结果，全部通过后再启动 Provider。
+
+### Firecracker Provider
+
+| 检查项 | 要求与处理 |
+|---|---|
+| root | Firecracker Provider 必须以 root 运行 |
+| KVM、tun | `/dev/kvm` 与 `/dev/net/tun` 可用；在虚拟机里运行需要开启嵌套虚拟化 |
+| cgroup v2 | 宿主使用 cgroup v2 |
+| 产物与状态目录同盘 | 两者必须在同一个文件系统上（基础盘用硬链接） |
+| `oryn-fc` 接口与 nft 表存在 | 安装网络脚本并 `sudo systemctl enable --now oryn-fc-net`，见 [Firecracker Provider](/admin/backends/firecracker/) |
+| `orb_url` 的端口在放行列表里 | 放行端口由 `oryn-fc-net.service` 的 `ORYN_FC_LINK_PORTS` 决定，缺省 `7643`；没开 `orb_tls` 的部署把它改成 `7600` |
+| 网段不与宿主其它接口重叠 | — |
+| 槽位 uid/gid 区间 `[uid_base, uid_base+16320)` 不与 `/etc/subuid`、`/etc/subgid` 的任何一段及已有用户、组重叠 | 重叠时预检列出冲突并建议一个空闲的 `uid_base`，写进 `firecracker.uid_base` |
+| 宿主内核版本 | Firecracker 官方支持 5.10、6.1、6.18；其它版本预检只给警告 |
+
+宿主还需要 x86_64，以及 PATH 里的 `ip`、`nft`、`mke2fs`、`cp`。
+
+### Docker Provider 的 Agent 沙箱
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| Provider 拒绝启动，错误以 `docker.sandbox.` 开头 | 开启沙箱时 `network` 为空、`socket_dir` 不是绝对路径，或 `dns` 里有非 IP 的项 | 改正 `provider.yaml` 的 `docker.sandbox` 段 |
+| 预检或启动时 `docker network inspect <network>` 失败 | 沙箱用的 Docker 网络不存在 | 先运行 `sudo deploy/docker/oryn-sbx-net.sh up` |
+| 宿主重启后 `egress` 沙箱能访问宿主与内网 | 脚本装的 iptables 规则不随重启保留 | 在 Provider 启动前重跑一次 `up`，例如给 `oryn-provider.service` 加 drop-in，在 `[Service]` 下写 `ExecStartPre=/usr/local/lib/oryn/oryn-sbx-net.sh up` |
+
+## 执行环境
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| 工作台顶部出现诊断条，线程里出现「环境 setup 失败」 | `.oryn/setup` 退出非零。这不会阻塞环境就绪 | 在诊断条查看日志，或交给当前线程的 Agent（内置 `oryn-setup` 技能）修复；也可以在环境内运行 `oryn orb setup logs`，改好后 `oryn orb setup run` |
+| 「环境 setup 失败」，仓库里的 Git LFS 文件仍是指针文本 | setup 取不下 LFS 对象：对象不存在、凭据被拒，或环境里没有 `git-lfs` | 修好原因后在仓库根运行 `git lfs pull` |
+| setup 日志里有 `warning: NO_PROXY/no_proxy covers <host> …` | 该主机被 `NO_PROXY` 或 `no_proxy` 覆盖，不经出站代理；私有仓库与推送会失败 | 把该主机从 `NO_PROXY` 和 `no_proxy` 里去掉，重新唤醒环境 |
+| 启用专用网桥与防火墙后，环境里域名解析失败 | Docker 内置解析器转发到的上游 DNS 在私有网段，被丢弃规则挡住 | 在 `docker.extra_run_args` 里加 `--dns 1.1.1.1` 之类的公网解析器，或在丢弃规则之前放行该上游的 53 端口 |
+| 创建沙箱失败：`orbd in the provider image has no sandbox mode; rebuild the orb image` | Provider 镜像或 Firecracker 根盘里的 `orbd` 太旧 | 重建镜像；Firecracker 还要重新生成并安装根盘，见[升级](/admin/operations/upgrade/) |
+| `oryn sandbox cp` 报 `orbd_outdated` | 两端的 `orbd` 不都是新版 | 已有环境要重建后才会升级 `orbd` |
+| Firecracker 环境创建失败，原因 `capacity` | 超出 `firecracker.limits.max_vms` 或 `max_memory_mb`；冻结的 VM 也计入内存上限，沙箱 VM 与普通环境共用槽位 | — |
+| 停机环境的文件面板提示唤醒后才能浏览 | Provider 是旧版，不声明停机预览能力 | 把控制面与 Provider 升级到同一版本 |
+| Runner 启动失败，下载 Oryn Core 出错 | 无法直连 GitHub，或下载、校验失败；不会回退到本机 `omp` | 设 `ORYN_CORE_BASE_URL=<镜像根>` |
+| Runner 启动失败，端口被占用 | 出站通道要监听 `127.0.0.1:7811` | 设 `ORYN_EGRESS_ADDR=127.0.0.1:<端口>`（只允许回环地址） |
+
+收件箱 `/inbox` 的「出错」分节会把出错原因归类成一句话（例如镜像拉取被拒、找不到镜像、容器命令非零退出、连接超时），附带镜像名、退出码等小签，原文降为一行等宽小字。
+
+## 项目仓库区块
+
+项目主页的仓库区块不可用时只显示一条说明，「最近线程」与服务照常。已有镜像时拉取失败不影响浏览：继续显示旧数据，同步状态旁有告警图标说明最近一次失败的原因。
+
+| 说明 | 原因 | 处理 |
+|---|---|---|
+| 还没有关联仓库 | 项目没有仓库地址 | 在项目设置「概览」里填写 |
+| 控制面未安装 git、git 版本过旧 | 控制面主机没有 git 或低于 2.31，仓库浏览停用，其余功能不受影响 | 安装 git 2.31 或更高版本后重启 `orynd` |
+| 仓库尚未克隆 | 已归档的项目不自动克隆 | 点「立即同步」 |
+| 只支持 https:// 仓库地址 | `git@…` 或带端口、用户名的地址不能镜像 | — |
+| 需要凭据、凭据被拒绝 | 私有仓库没有可用令牌，或令牌无权读这个仓库 | 连接 GitHub 账号，或添加 `git/<主机>/token` |
+| 找不到仓库、连不上仓库主机、拉取超时 | 上游 404、网络不通，或首次克隆超过 15 分钟、增量拉取超过 5 分钟 | 首次克隆失败后不自动重试，要手动同步或等推送事件 |
+| 仓库主机解析到内网地址，已拦截 | 没有令牌的主机只能连公网地址 | — |
+| 仓库超过镜像大小上限 | 镜像超过 `repos.max_mirror_gb`（缺省 5 GiB）：拉取中途被终止，或拉取完成后镜像被删除 | 上限可在「设置 → 控制面」覆盖 |
+| 控制面磁盘空间不足 | 数据盘可用空间低于 `repos.min_free_gb`（缺省 2 GiB），不克隆、不拉取 | — |
+| 克隆中… | 首次克隆可能需要几分钟 | 完成后自动刷新 |
+| 仓库是空的 | 镜像就绪，但还没有任何分支 | 推送第一个提交后显示 |
+
+## Hindsight 记忆服务
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| 管理页状态显示版本警告 | Hindsight 报告的版本不在 Oryn 测试过的小版本（当前 1.2）内 | 小版本升级要等 Oryn 更新测试过的版本，见[升级](/admin/operations/upgrade/) |
+| 某用途的模型中转一律返回 409 | 换了协议类型或重排模式后，还没确认已重启 Hindsight | 按管理页给出的片段改 `.env`，执行 `docker compose -f deploy/hindsight/compose.yaml up -d api`，再点「我已重启」 |
+| 保存「换嵌入模型」时返回 409 `hindsight_running` | Hindsight 仍能连上；换嵌入模型必须停机 | 先 `docker compose -f deploy/hindsight/compose.yaml stop api`，再保存，见 [Hindsight 记忆服务](/admin/components/hindsight/) |
+| 改了 `HINDSIGHT_DB_PASSWORD` 后 API 连不上库 | 该值只在数据卷首次初始化时生效 | 要改就在首次 `up` 之前改 |
+
+## SSH 主机
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| 连接被拒绝，提示指纹变了 | 目标机重装或换了主机密钥；第一次成功连接时固定的主机公钥与现在不符 | 确认无误后在设置页重置，或运行 `oryn ssh reset-host-key <名>` |
+| 用密码登录失败 | 遇到多因素认证会直接失败 | — |

@@ -1,0 +1,103 @@
+---
+title: 统计数据的保留与重算
+description: 设置统计数据的保留期，在升级后或需要时重算统计，并设置成本预算告警。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 9. 统计分析（M10）'
+  - file: docs/deploy.md
+    section: '## 2. 控制面配置 `/etc/oryn/orynd.yaml`'
+  - file: cmd/orynd/main.go
+  - file: cmd/oryn/stats.go
+  - file: cmd/orynd/admin.go
+  - file: internal/opsconf/opsconf.go
+verified: 6fe0baf13191
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+统计页 `/stats`、`oryn stats` 与全局助手的 `get_stats` 都从控制面库里的事实行现算，不需要额外服务。你在运维上要管的是三件事：这些数据保留多久、什么时候需要重算，以及成本预算告警。
+
+## 设置保留期
+
+在 `/etc/oryn/orynd.yaml` 的 `stats.retention` 下设置：
+
+```yaml
+stats:
+  retention:
+    samples: 720h    # orb 资源采样（orb_samples）；默认 30 天
+    events: 8760h    # 已删除 orb 的状态事件与 setup 记录、预算告警账本（账本至少保留 33 天）；默认 1 年（活 orb 的事件永不删）
+    usage: 0s        # 用量 / 工具调用 / 回合事实行；默认 0 = 永久
+```
+
+| 键 | 清理的数据 | 默认值 |
+|---|---|---|
+| `stats.retention.samples` | 执行环境（orb）的资源采样 | `720h`（30 天） |
+| `stats.retention.events` | 已删除环境的状态事件与 setup 记录、预算告警账本；仍存在的环境的事件永不删除 | `8760h`（1 年） |
+| `stats.retention.usage` | 用量、工具调用与回合事实行 | `0s`（永久） |
+
+每项为 `0`（永久）或至少 `24h`，否则 `orynd` 拒绝启动。预算告警账本至少保留 33 天。清理在启动时与之后每小时各跑一次。
+
+`orynd.yaml` 里的保留期只在启动时读取，改动后要重启 `orynd`。三个键也可以在「设置 → 控制面」里覆盖：覆盖优先于配置文件，存在 `oryn.db` 里，改完不用重启；在那里点「恢复」删除覆盖后，回落到配置文件的值。
+
+全部配置键见 [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/)。
+
+## 升级后的自动回填
+
+升级后首次启动时，如果事实行的版本（`stats_state.facts_version`）与当前代码不一致，`orynd` 在后台逐线程按现有条目重算：去掉 fork 造成的重复计费，补上 `model_usage` 的开销。
+
+- 期间统计页顶部显示「历史数据回填中」与进度，其它功能照常。
+- 重算可中断，下次启动从断点续作。
+- 升级前就已删除的线程留下的用量行没有条目可重算，保持原样；在按项目或 Space 的分组里落在空键。
+
+## 手动重算
+
+全量重算：
+
+```bash
+orynd --config /etc/oryn/orynd.yaml admin rebuild-stats
+```
+
+只重算一个线程：
+
+```bash
+orynd --config /etc/oryn/orynd.yaml admin rebuild-stats --thread <线程 id>
+```
+
+`--config` 必须写在 `admin` 之前。命令可以在 `orynd` 运行时执行：每个事务很短，靠 SQLite 的 `busy_timeout` 排队。完成后在标准输出打印 `rebuilt <线程数> threads`。参数说明见 [`orynd` 命令参考](/reference/cli/orynd/)。
+
+## 设置预算告警
+
+在统计页设置日上限与月上限，或者用命令：
+
+```bash
+oryn stats budget set --daily <日上限美元> --monthly <月上限美元> --warn <预警百分比>
+```
+
+`--daily` 或 `--monthly` 给 `0` 表示取消该上限，`--warn` 取 0–99（`0` 表示不预警）。其余参数见 [`oryn stats` 命令参考](/reference/cli/stats/)。
+
+设置后，`orynd` 每 60 秒评估一次。越过预警线或上限时，发一条不属于任何线程的系统通知：应用内、推送，以及在「设置 → 通知」里订阅了「预算告警」的渠道。同一周期同一级别只发一次。
+
+<Aside type="caution">
+用量来自环境里的会话文件。`orynd` 入库时会钳制明显不合理的数值与字符串，但环境里的 Agent 仍可以改写自己的会话来少报用量。预算告警是提醒，不是对抗恶意 Agent 的计费防线；需要硬上限时，在模型服务商一侧设置额度。
+</Aside>
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 保留期的最小值（`0` 除外） | `24h` |
+| 保留期清理的间隔 | 启动时一次，之后每小时一次 |
+| 预算告警账本的最短保留 | 33 天 |
+| 预算评估的间隔 | 60 秒 |
+| `--warn` 的取值 | 0–99 |
+
+## 相关
+
+- [成本统计与预算](/guide/automation/stats/)
+- [`orynd` 命令参考](/reference/cli/orynd/)
+- [`oryn stats` 命令参考](/reference/cli/stats/)
+- [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/)
+- [配置控制面](/admin/install/control-plane/)
