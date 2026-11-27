@@ -1,0 +1,25 @@
+---
+// 列出某个功能依赖的、需要管理员先启用的组件。
+import { Aside } from '@astrojs/starlight/components';
+import { requirements } from '../data/requirements';
+
+interface Props {
+	ids: string[];
+}
+
+const { ids } = Astro.props;
+const items = ids.map((id) => {
+	const item = requirements[id];
+	if (!item) {
+		throw new Error(`<Requires>: 未登记的 id「${id}」，请在 src/data/requirements.ts 中登记`);
+	}
+	return item;
+});
+---
+
+<Aside type="note" title="需要先启用">
+	<p>本页的功能依赖下列组件，需由管理员先启用：</p>
+	<ul>
+		{items.map((item) => <li><a href={item.href}>{item.name}</a></li>)}
+	</ul>
+</Aside>
