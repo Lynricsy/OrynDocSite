@@ -1,0 +1,103 @@
+---
+title: 认识全局助手
+description: 全局助手能自己完成、遥控电脑完成和派线程完成的事，以及删除、公开分享与密钥类操作为什么要你确认。
+type: explanation
+sources:
+  - file: docs/features.md
+    section: '## 全局助手与 Space'
+  - file: docs/features.md
+    section: '### 全局助手'
+  - file: docs/features.md
+    section: '### 首屏直达'
+  - file: README.md
+    section: '## 全局助手与 Space'
+  - file: docs/deploy.md
+    section: '### 残余风险'
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 1
+---
+
+import Shot from '@/components/Shot.astro';
+import Requires from '@/components/Requires.astro';
+
+_本页回答：全局助手能替你做什么，哪些事必须你点头？_
+
+<Requires ids={['coordinator']} />
+
+全局助手是一个不跑在执行环境（orb）里的 Agent。控制面内置的协调宿主按需在严格沙箱里拉起它的进程：沙箱由独立系统账号、Landlock LSM、seccomp-bpf 与 Linux 命名空间围成，里面唯一能连的是回环上通往控制面的出站代理端口。沙箱的细节与外部内容的处理见[协调沙箱与不可信输入](/security/sandbox-untrusted/)。
+
+## 从哪里和它对话
+
+首屏输入框的角色（role）胶囊可以选「全局助手」。选中后执行位置与项目胶囊收起，输入框背后的点阵染上助手色；发送即新建一个助手对话，并带上首条消息、附件与所选模型。「新对话默认对象」决定每次打开首屏时输入框预选的对象，保存在服务端，各设备一致。
+
+侧栏的「全局助手」分区列出助手对话。分区最上面置顶一条显示助手名字和头像的永久对话，即主线；定时与 GitHub 规则的结果汇到这里，见[主线：结果汇总与提醒](/guide/assistant/mainline/)。
+
+<Shot id="readme/assistant" alt="左为全局助手的主线：自动化结果折叠成一行「幕后」，下方是助手的回复与设置提醒的工具卡；右为首屏选中全局助手，输入框背后的点阵染上助手色" />
+
+## 三层能力
+
+助手按三层执行，能自己做的就不派线程。
+
+1. **自己动手**：用 `web_search` 搜索、用 `read` 读网页、用 `generate_image` 生图，调用全局 `mcp.json` 里的 HTTP / SSE MCP 服务器，以及操作 Artifact（含截图、导出进[文件库](/guide/assistant/library/)、导入、从回收站恢复）。
+2. **遥控「助手的电脑」**：一台属于助手的执行环境，见[助手的电脑](/guide/assistant/computer/)。
+3. **派出与管理 Agent**：在项目、Space 或 Runner 目录里开线程，可以指定 Provider、类型、已有的环境与角色；给工作线程或 Space 的协调对话发话并收回报。其余你在 Oryn 里能做的事，包括线程、线程文件、项目、Space、box、环境、分享、Artifact、定时、GitHub、SSH 主机、记忆、通知、密钥与各项设置，都经 `oryn` 工具完成。
+
+助手的联网只经控制面的正向代理出去，代理在连接时按实际 IP 判定，只连公网地址；MCP 的鉴权头由控制面注入，不进沙箱。管理员侧的配置见[助手联网、MCP 与后台研究](/admin/components/assistant-network/)。
+
+## 内置 `oryn` 技能
+
+助手的顶层工具只留常用的一组，其余能力收进内置技能 `oryn`。它的索引覆盖 18 个域，每个域有一份操作清单，每个操作有一份带参数 JSON Schema 的文档。这些文档在运行时由 OpenAPI 规格与策略表生成，助手只在用到时读取，不占常驻上下文。
+
+助手经这个技能执行的接口操作，与网页走同一个处理器。策略表给每个操作单独定级：
+
+| 级别 | 处理方式 |
+|---|---|
+| 读 | 直接执行 |
+| 写 | 计入限速，记进「自动化 → 操作记录」，动作名为「接口操作」 |
+| 删除、对外公开、凭据与安全设置 | 走确认卡 |
+| 需要你本人到场、结果是一次性凭据或二进制内容 | 不开放；技能文档写明替代做法 |
+
+## 确认卡
+
+以下操作不会直接执行：
+
+- 删除：线程、项目、Space、定时、触发规则、环境等。
+- 让未登录的人能访问的分享：线程分享链接、Portal 公开预览、以访问码或公开方式发布 Artifact、公开 box 应用。
+- 密钥、凭据与安全相关设置。
+
+助手提出这类操作时，对话里先出现一张确认卡，卡片正文里的密钥值打码；同时推送一条带「是」「否」的通知。你点了「是」，控制面才执行，结果以自动消息回到对话。24 小时没人作答，确认卡过期。
+
+<Shot id="site/assistant-confirm" alt="确认卡：标题「删除定时「每日巡检」？」，正文说明删除后果与提出原因，右下是「否」与「是」两个按钮" />
+
+新建、修改、归档、发消息不需要确认，由助手直接执行并写审计，可以在「自动化 → 操作记录」里查看。联网、MCP、助手电脑上的操作，以及 Artifact 的创建与修改不写审计，只在对话转录里留下工具卡。
+
+## 只有你本人能做的事
+
+助手不能代办以下操作：
+
+- 登录与 Passkey
+- 设备配对
+- Provider 与 Runner 令牌
+- 绑定 Telegram
+- 作答确认卡
+
+## 设置
+
+「设置 → 全局助手」里与助手行为有关的项：
+
+| 项 | 作用 |
+|---|---|
+| 「模型与思考档位」 | 新助手对话与主线默认使用的模型和思考档位。修改后主线同步切换，已有的其他对话不变 |
+| 「自定义提示词」 | 至多 8000 字，追加到内置能力与安全规则之后，不覆盖内置规则，不影响 Space 协调者与后台研究员。保存后新对话立即生效，运行中的助手对话在空闲后自动应用 |
+| 「联网与 MCP」 | 「允许助手联网」总开关；MCP 服务器逐个开关 |
+| 「助手的电脑」 | 创建助手电脑时用的 Provider 与类型，见[助手的电脑](/guide/assistant/computer/) |
+| 「后台研究」 | 见[后台研究与跟进](/guide/assistant/research/) |
+
+## 相关
+
+- [主线：结果汇总与提醒](/guide/assistant/mainline/)
+- [主人记忆](/guide/assistant/owner-memory/)
+- [Space：并行协调多条线程](/guide/automation/spaces/)
+- [协调宿主：启用全局助手与 Space](/admin/components/coordinator/)

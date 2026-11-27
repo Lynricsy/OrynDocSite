@@ -1,0 +1,98 @@
+---
+title: 文件库
+description: 全局助手经手的文件存放在哪里、谁能读到，以及怎样在面板里管理它们、带着它们开线程。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### 文件库'
+  - file: docs/protocol.md
+    section: '#### 全局助手文件库（M13）'
+  - file: docs/protocol.md
+    section: '### 宿主工具（只给全局助手）'
+    under: '## M13：全局助手文件库进协调宿主'
+  - file: docs/protocol.md
+    section: '### orb 内 `oryn library put`'
+  - file: web/src/components/assistant/LibraryPanel.tsx
+  - file: web/src/pages/AssistantPage.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 5
+---
+
+文件库集中存放全局助手经手的文件：你发给它的附件、它生成或取回的文件，以及工作线程里的 Agent 存给它的文件。助手在沙箱里能直接读这些文件，也能把它们带进新线程或自己的电脑。
+
+## 了解文件从哪里进来
+
+以下文件统一进入文件库：
+
+- 助手对话里的附件。上传只走输入框的附件，文件库面板不另设上传。
+- 助手写到 `~/library/out/` 的文件和生图结果，由助手存入。
+- 从工作线程的执行环境（orb）或[助手的电脑](/guide/assistant/computer/)取回的文件，包括电脑桌面的录屏。
+- Artifact 的导出物。
+- 环境里的 Agent 用 `oryn library put` 存入的文件，见下文。
+
+文件库同步进协调宿主的沙箱，助手用 omp 自带的 `read` 读取，支持 PDF、Office、图片、压缩包、SQLite 等。
+
+上传了但还没随消息发送的文件 24 小时后回收，其余文件不会自动回收。所属对话删除后，文件仍留在库里。
+
+## 了解可见范围
+
+每个文件有两种可见范围之一：
+
+| 范围 | 谁能读 |
+|---|---|
+| 「仅此对话」 | 只有所属的助手对话 |
+| 「库内共享」 | 所有助手对话 |
+
+你在对话里上传的附件是「仅此对话」。环境里用 `oryn library put` 存入的文件是「库内共享」，不属于任何对话。助手存文件时可以直接设为共享。
+
+## 在面板里管理文件
+
+在任一助手对话的页头点「文件库」，打开文件库面板。面板缺省列出「本对话与共享」的文件，可以切到「全部」。
+
+每行显示名称、大小、来源（「上传」「助手保存」「orb」）、可见范围、所属对话与来源线程、时间。行内的操作：
+
+| 操作 | 说明 |
+|---|---|
+| 「预览」 | 只读预览 |
+| 「下载」 | 下载原文件 |
+| 「设为库内共享」或「改回仅所属对话」 | 切换可见范围 |
+| 「删除」 | 确认后删除；已复制给其它线程的附件不受影响 |
+| 「转为 artifact」 | 只对 Office 文件出现；新的 Artifact 归属本对话 |
+
+Office 文件与 Artifact 的关系见 [Word、Excel、PowerPoint 与 PDF](/guide/artifacts/office/)。
+
+## 带着库文件开线程
+
+在助手对话里让助手开新线程时，可以要它附带库里的文件。每个文件须属于本对话或已共享；它们被复制成新线程首条消息的附件。
+
+助手也能把库文件放进某个线程的环境，或放进自己的电脑。
+
+## 从执行环境里存入文件
+
+在工作线程的环境里，Agent 用 `oryn library put` 把文件存进文件库：
+
+```bash
+oryn library put <环境里的文件路径> --name <库内文件名>
+```
+
+- 只在环境内可用；调用方是当前线程。
+- `--name` 缺省取文件名；`--json` 以 JSON 输出文件记录。
+- 文件必须是普通文件，大小不超过 100 MiB。目录或不存在的路径以退出码 2 失败。
+- 存入的文件是「库内共享」，来源记为「orb」，并记下来源线程。只有属于该环境、未归档的工作线程能存入。
+
+Runner 线程里没有 `oryn` 命令，Agent 用扩展提供的工具存入，文件必须位于线程的工作目录之内。完整参数见 [`oryn library`](/reference/cli/library/)。
+
+## 限制
+
+| 项 | 上限 |
+|---|---|
+| 单个文件（上传、存入） | 100 MiB |
+| 未随消息发送的上传 | 24 小时后回收 |
+
+## 相关
+
+- [认识全局助手](/guide/assistant/overview/)
+- [助手的电脑](/guide/assistant/computer/)
+- [`oryn library`](/reference/cli/library/)
