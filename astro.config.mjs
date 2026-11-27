@@ -38,7 +38,8 @@ export default defineConfig({
 			customCss: ['./src/styles/fonts.css', './src/styles/theme.css'],
 			components: { Footer: './src/components/Footer.astro' },
 			plugins: [
-				starlightLinksValidator(),
+				// API 端点页由 starlight-openapi 生成，不在内容集合里，校验器看不到
+				starlightLinksValidator({ exclude: ['/reference/api/', '/reference/api/**'] }),
 				starlightImageZoom(),
 				starlightOpenAPI([
 					{
@@ -58,7 +59,32 @@ export default defineConfig({
 							label: '使用',
 							link: '/start/what-is-oryn/',
 							icon: 'open-book',
-							items: [group('开始', 'start', false)],
+							items: [
+								group('开始', 'start', false),
+								group('线程与对话', 'guide/threads'),
+								group('工程面板', 'guide/workbench'),
+								group('项目', 'guide/projects'),
+								group('执行环境', 'guide/environments'),
+								group('Agent 配置', 'guide/agent'),
+								group('全局助手', 'guide/assistant'),
+								group('自动化与集成', 'guide/automation'),
+								group('Artifacts 与视图', 'guide/artifacts'),
+								group('Boxes', 'guide/boxes'),
+								group('客户端', 'guide/clients'),
+							],
+						},
+						{
+							id: 'admin',
+							label: '部署与运维',
+							link: '/admin/overview/',
+							icon: 'setting',
+							items: [
+								group('基础部署', 'admin/install'),
+								group('执行后端', 'admin/backends'),
+								group('可选组件', 'admin/components'),
+								group('运维', 'admin/operations'),
+								group('安全模型', 'security'),
+							],
 						},
 						{
 							id: 'reference',
@@ -66,8 +92,14 @@ export default defineConfig({
 							link: '/reference/',
 							icon: 'document',
 							items: [
+								'reference',
 								group('命令行', 'reference/cli'),
 								group('配置文件', 'reference/config'),
+								group('项目文件', 'reference/project-files'),
+								group('界面', 'reference/ui'),
+								'reference/env-vars',
+								'reference/glossary',
+								'reference/api-guide',
 								...openAPISidebarGroups,
 							],
 						},

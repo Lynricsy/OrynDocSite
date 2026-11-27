@@ -42,6 +42,17 @@ function scanBroken(file: string, text: string) {
 	});
 }
 
+/** MDX 正文里反引号与代码块之外的 `<中文…>` 会被当成 JSX 标签，构建直接失败。 */
+function scanBareTags(file: string, body: string) {
+	let fence = false;
+	body.split('\n').forEach((line, i) => {
+		if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+		if (fence) return;
+		const prose = line.replace(/`[^`]*`/g, '');
+		if (/<[^\x00-\x7F]/.test(prose)) problems.push(`${file}:${i + 1}: 正文里有裸露的 <…>，请放进反引号`);
+	});
+}
+
 for (const path of new Glob('**/*.{md,mdx}').scanSync(docsDir)) {
 	const abs = join(docsDir, path);
 	const rel = relative(root, abs);
@@ -53,6 +64,7 @@ for (const path of new Glob('**/*.{md,mdx}').scanSync(docsDir)) {
 	// frontmatter 的 sources.section 必须照抄 Oryn 原标题（可能带里程碑标签），只查正文
 	const body = text.replace(/^---\r?\n[\s\S]*?\r?\n---/, (fm) => '\n'.repeat(fm.split('\n').length - 1));
 	scanLeaks(rel, body);
+	if (path.endsWith('.mdx')) scanBareTags(rel, body);
 
 	if (path.endsWith('.mdx') && path !== 'index.mdx') {
 		if (!fm.type) problems.push(`${rel}: 缺少 type`);
