@@ -9,6 +9,11 @@
 	--oryn-toc-width: 14rem;
 }
 
+/* 目录内层容器原本按左栏宽度算，改为跟随目录宽度，否则长条目会被裁掉行尾 */
+.right-sidebar-panel > .sl-container {
+	width: calc(var(--oryn-toc-width) - 2 * var(--sl-sidebar-pad-x));
+}
+
 @media (min-width: 72rem) {
 	.right-sidebar-container {
 		width: max(
