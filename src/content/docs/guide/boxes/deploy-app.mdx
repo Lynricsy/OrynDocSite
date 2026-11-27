@@ -1,0 +1,111 @@
+---
+title: 部署第一个应用
+description: 在仓库里写一份最小的 .oryn/box.yaml，从线程里把应用部署到一台新 box，并打开它的地址。
+type: tutorial
+sources:
+  - file: docs/features.md
+    section: '## Boxes'
+  - file: internal/boxcfg/boxcfg.go
+  - file: cmd/oryn/boxes_deploy.go
+  - file: internal/boxes/boxes.go
+  - file: internal/boxes/deploy.go
+  - file: internal/portalhost/portalhost.go
+  - file: internal/orbdrt/assets/oryn-boxes/SKILL.md
+verified: 6fe0baf13191
+sidebar:
+  order: 2
+---
+
+import Requires from '@/components/Requires.astro';
+import { Steps } from '@astrojs/starlight/components';
+
+本页带你把一个仓库里的 Web 应用部署到一台 box 上。完成后你会得到：一台新建的 box，上面运行着你的应用，应用有一个固定的 `https://<应用名>.<portal_domain>/` 地址，之后在同一个目录里再运行一次 `oryn boxes deploy` 就能发布新版本。
+
+<Requires ids={['portal']} />
+
+## 开始之前
+
+- 管理员已经配置了 `portal_domain`。没有配置时部署照常完成，但应用没有访问地址。
+- 你有一个项目，项目的仓库是一个 Bun 应用：`bun install && bun run build` 能完成构建，`bun run start` 启动的服务监听环境变量 `PORT` 给出的端口。
+- 你在这个项目里开了一条线程，线程运行在执行环境（orb）里。Runner 上的线程与定时任务、GitHub 触发的线程不能部署到 box。
+- 想好两个名字：
+  - box 名：小写字母、数字和连字符，至多 30 个字符，首尾是字母或数字，不含连续两个连字符。本页用 `workbench`。
+  - 应用名：小写字母、数字和连字符，至多 20 个字符。它同时是应用地址的第一段。本页用 `wiki`。
+
+下面的命令都在线程右面板的「终端」里、仓库根目录下运行。
+
+## 部署
+
+<Steps>
+
+1. 在仓库根目录新建 `.oryn/box.yaml`，内容如下：
+
+   ```yaml
+   services:
+     web:
+       command: bun run start   # 必须监听 $PORT
+   build: bun install && bun run build
+   ```
+
+   `services.web` 是一个名为 `web` 的服务，`build` 是部署前在执行环境里运行的构建命令。其余字段见 [`.oryn/box.yaml` 参考](/reference/project-files/box-yaml/)。
+
+2. 提交这个文件。部署读取的是 `HEAD` 提交里的配置与代码，未提交的改动不会带上：
+
+   ```bash
+   git add .oryn/box.yaml
+   git commit -m "部署到 box"
+   ```
+
+   `git status` 显示工作区干净。
+
+3. 部署，并顺手新建 box：
+
+   ```bash
+   oryn boxes deploy --on workbench --name wiki --create
+   ```
+
+   `--create` 在 box 不存在时按缺省的 Provider 与类型新建它；新建的 box 要等镜像拉起，这一步会多花一些时间。命令依次打印构建与上传的进度，形如：
+
+   ```text
+   building wiki…
+   uploading <提交前 12 位> (<大小> KiB) to workbench…
+   ```
+
+   box 换到新 release、重启服务并等端口开始监听。成功时最后一行是：
+
+   ```text
+   deployed wiki to workbench: <应用地址>
+   ```
+
+   同时，CLI 在仓库根目录写入 `.oryn/box-deploy.json`，记下这次的目标 box 与应用名。
+
+4. 在浏览器里打开上一步打印的地址 `https://wiki.<portal_domain>/`，看到你的应用首页。应用默认公开，任何拿到地址的人都能打开。
+
+   侧栏「更多」里的「Boxes」页列出了 `workbench`，进入后在应用列表里看到 `wiki`、它的地址、仓库、分支与部署的提交。
+
+</Steps>
+
+## 部署没有成功时
+
+- 打印 `not_listening`：服务没有在 `$PORT` 上监听。用 `oryn boxes logs workbench --app wiki` 看服务日志，确认 `command` 能启动并监听 `PORT`。
+- 打印 `uncommitted changes are not deployed; building commit <提交> in a clean worktree`：工作区里有未提交的改动，这次部署的是 `HEAD` 提交，不含这些改动。先提交再部署。
+- 打印 `release_too_large`：release 压缩包超过 512 MiB。在 `.oryn/box.yaml` 里改用 `source: false` 加 `artifacts`，只打包构建产物。
+
+部署失败时 box 退回上一个 release，不留半成品。
+
+## 发布新版本
+
+之后改完代码、提交，在同一个目录里运行：
+
+```bash
+oryn boxes deploy
+```
+
+目标从 `.oryn/box-deploy.json` 读取，不必再给 `--on` 与 `--name`。
+
+## 下一步
+
+- [管理应用：密钥、回滚、日志与运行时段](/guide/boxes/manage-apps/)
+- [在 box 上开线程](/guide/boxes/threads-on-box/)
+- [认识 Boxes](/guide/boxes/overview/)
+- [`oryn boxes` 命令参考](/reference/cli/boxes/)

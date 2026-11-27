@@ -1,0 +1,82 @@
+---
+title: 认识 Boxes
+description: box 是常驻运行应用的机器：它和线程的执行环境有何不同、适合放什么、上限与隔离边界，以及哪些线程不能使用 box。
+type: explanation
+sources:
+  - file: docs/features.md
+    section: '## Boxes'
+  - file: README.md
+    section: '## Boxes'
+  - file: internal/boxes/boxes.go
+  - file: internal/boxes/deploy.go
+  - file: internal/orbdrt/assets/oryn-boxes/SKILL.md
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 1
+---
+
+import Shot from '@/components/Shot.astro';
+
+*本页回答：box 和线程的环境有什么不同、适合放什么？*
+
+box 是一台常驻机器，用来一直开着跑你的应用：内部工具、对外的站点或任何需要持续在线的服务。线程的执行环境（orb）负责构建，box 只负责运行：你在线程里运行 `oryn boxes deploy`，把仓库 `HEAD` 提交构建成一个 release 送上 box。
+
+<Shot id="site/boxes" alt="Boxes 列表里有 workbench 与 lab 两台 box，各自显示规格、应用数与最近部署的应用" />
+
+## 与线程的环境对比
+
+| | 线程的环境 | box |
+|---|---|---|
+| 由谁拉起 | Provider，规格取 Provider 的环境类型 | 同样由 Provider（Docker / Sysbox / Firecracker）拉起，规格取 Provider 的环境类型 |
+| 生命周期 | 跟随线程，空闲冻结，见[环境如何随线程生灭](/guide/environments/lifecycle/) | 常驻：不空闲冻结，不随线程回收，掉线后自动拉起；可以设每日运行时段 |
+| 在部署中的职责 | 构建：部署命令在这里运行构建 | 运行：接收 release 并运行应用 |
+| 应用地址 | — | 每个应用一个 `https://<应用>.<portal_domain>/` |
+| 应用数据 | — | 每个应用的数据目录 `~/apps/<应用>/data` 在部署与重启之间保留 |
+
+## 一台 box 上有什么
+
+一台 box 可以跑多个应用。每个应用有自己的地址、密钥与数据目录。
+
+- **部署**：每次部署把一个 release 送上 box。box 换到新 release、重启服务、等待端口监听；起不来就退回上一个 release，不留半成品。box 保留当前 release 加前两个，可以回滚。
+- **公开性**：应用默认公开；设为私有后要求你登录才能访问。
+- **运行时段**：box 可以按每日的开机、关机时刻与时区启停。停着的 box 上的线程不接收消息。
+
+<Shot id="site/box-detail" alt="workbench 的 box 页：左侧列出三个应用及其地址、仓库、分支、提交与部署时间，其中一个标为私有、一个首次部署进行中；下方是部署、重启、部署失败与改为私有的活动流；右侧是最近 21 天的用量柱状图与状态、时段、规格、Provider 等信息" />
+
+应用部署见[部署第一个应用](/guide/boxes/deploy-app/)，日常管理见[管理应用](/guide/boxes/manage-apps/)。线程也可以直接开在 box 上，操作线上的应用和数据，见[在 box 上开线程](/guide/boxes/threads-on-box/)。
+
+## 适合放什么
+
+box 适合放需要一直在线、由你的仓库构建出来的应用。线程的环境会空闲冻结、随线程回收，不适合承载要持续提供服务的进程；box 不冻结、掉线后自动拉起。
+
+同一台 box 上的应用彼此没有隔离（见下节）。互不信任的应用放到不同的 box 上。
+
+## 上限
+
+| 项 | 上限 |
+|---|---|
+| box 总数 | 16 台 |
+| 每台 box 的应用数 | 16 个 |
+| 每个应用保留的 release | 3 个（当前加前两个） |
+| 单个 release 压缩包 | 512 MiB |
+
+## 隔离边界
+
+- 同一台 box 上的应用与开在这台 box 上的线程以同一个用户运行，彼此没有隔离。不可信的应用放到单独的 box。
+- box 的数据就是那台机器的磁盘，删除 box 即丢失其上全部应用与数据，无法恢复。
+- 环境里的 Agent 不能删除 box。删除只能由你在 Boxes 页、用设备令牌登录的 `oryn` 命令行，或经全局助手的确认卡完成。
+- 管理员没有配置 `portal_domain` 时，应用没有访问地址。配置方法见[启用 Portal 泛域名](/admin/install/portal/)。
+
+## 哪些线程不能用 box
+
+- 部署只能在线程的执行环境里进行。Runner 上的线程与你自己的电脑都不能运行 `oryn boxes deploy`。
+- 全自动线程（定时任务、GitHub 触发的线程）不能使用 box。
+- 停着的 box 上的线程不接收消息，要先在 Boxes 页启动这台 box。
+
+## 相关
+
+- [部署第一个应用](/guide/boxes/deploy-app/)
+- [管理应用：密钥、回滚、日志与运行时段](/guide/boxes/manage-apps/)
+- [在 box 上开线程](/guide/boxes/threads-on-box/)
+- [`oryn boxes` 命令参考](/reference/cli/boxes/)

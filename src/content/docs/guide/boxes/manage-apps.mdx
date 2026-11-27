@@ -1,0 +1,180 @@
+---
+title: 管理应用：密钥、回滚、日志与运行时段
+description: 给 box 上的应用设置密钥与环境变量、重启、回滚、看日志、执行命令与传文件，切换公开性，设置运行时段，以及下线应用、清除数据。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '## Boxes'
+  - file: README.md
+    section: '## CLI 速查'
+  - file: internal/boxes/apps.go
+  - file: internal/boxes/boxes.go
+  - file: internal/boxes/deploy.go
+  - file: internal/boxes/preview.go
+  - file: internal/orbdrt/assets/oryn-boxes/SKILL.md
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+应用部署上 box 之后，日常维护在 box 页或 `oryn boxes` 命令里完成：换密钥、重启、回滚到上一个 release、排查日志、改公开性、让 box 按时段开关机。box 页在侧栏「更多」里的「Boxes」中，点一台 box 进入；每个应用有自己的操作菜单，整台 box 的操作在「Box 操作」菜单里。
+
+下面的命令在你登录过的电脑上与线程的执行环境（orb）里都能运行，个别例外在各节注明。命令参数见 [`oryn boxes`](/reference/cli/boxes/)。
+
+## 设置密钥与环境变量
+
+在 box 页应用菜单里选「密钥…」，添加名字与值；勾选「明文环境变量」时，这一项是可以经 API 读回值的普通环境变量，否则是密钥。改动在重启或下次部署后生效。
+
+等价命令：
+
+```bash
+# 设置密钥；--data-file <文件> 从文件读取值
+oryn boxes secrets set DATABASE_URL --box workbench --app wiki --value "postgres://localhost/wiki"
+# 设置明文环境变量
+oryn boxes secrets set LOG_LEVEL --box workbench --app wiki --value info --plain
+# 列出与删除
+oryn boxes secrets ls --box workbench --app wiki
+oryn boxes secrets rm LOG_LEVEL --box workbench --app wiki
+```
+
+名字须匹配 `^[A-Za-z_][A-Za-z0-9_]{0,63}$`。`PORT`、`ORYN_DEPLOYMENT_URL`、`ORYN_DEPLOYMENT_NAME`、`ORYN_DEPLOYMENT_BOX`、`ORYN_DEPLOYMENT_DATA_DIRECTORY` 由 Oryn 设置，不能用作名字。
+
+应用进程能读到的环境变量：
+
+| 变量 | 内容 |
+|---|---|
+| `PORT` | 服务必须监听的端口 |
+| `ORYN_DEPLOYMENT_URL` | 应用地址 |
+| `ORYN_DEPLOYMENT_NAME` | 应用名 |
+| `ORYN_DEPLOYMENT_BOX` | 所在的 box |
+| `ORYN_DEPLOYMENT_DATA_DIRECTORY` | 数据目录 `~/apps/<应用>/data` |
+
+应用的数据只写进数据目录，它在部署与重启之间保留。
+
+## 重启应用
+
+应用菜单里选「重启」，或：
+
+```bash
+oryn boxes restart workbench --app wiki
+```
+
+重启这个应用的全部服务，并重新下发密钥。
+
+## 回滚到上一个 release
+
+每个应用保留当前 release 与前两个。应用菜单里选「回滚…」；没有可回滚的版本时显示「没有更早的 release」。等价命令：
+
+```bash
+# 缺省回滚到上一个；--to <release-id> 指定目标
+oryn boxes rollback workbench --app wiki
+```
+
+部署卡住、一直显示部署中时，在应用菜单里「取消部署」，或运行 `oryn boxes cancel-deploy workbench --app wiki`。已经进入激活阶段的部署不能取消。
+
+## 查看日志
+
+应用菜单里选「日志」，或：
+
+```bash
+# 缺省取第一个服务、末尾 65536 字节；--service <服务名> 指定服务，--tail <字节数> 至多 1048576
+oryn boxes logs workbench --app wiki
+```
+
+## 在 box 上执行命令与传文件
+
+在应用的线上目录里执行命令，输出实时返回，退出码透传：
+
+```bash
+oryn boxes exec workbench --app wiki -- ./migrate
+```
+
+`--timeout` 缺省 600 秒，在执行环境里至多 1800 秒，在环境外至多 3600 秒。在执行环境里运行时不能中途取消。
+
+在本地与 box 之间复制文件，两侧中恰有一侧写成 `<box>:<路径>`：
+
+```bash
+# box 一侧的路径相对应用的数据目录；不给 --app 时相对 box 的家目录
+oryn boxes cp ./seed.db workbench:seed.db --app wiki
+```
+
+box 上的目标目录要先存在。在执行环境里运行时，本地一侧的路径必须在 `$HOME` 之下。
+
+## 设为私有或公开
+
+应用默认公开。应用菜单里选「设为私有」后，访问要求你登录；选「设为公开」时会提示「任何拿到地址的人都能打开它」。部署时也可以切换，之后的部署保持这个设置：
+
+```bash
+# 只能在线程的执行环境里、仓库目录下运行
+oryn boxes deploy --private
+oryn boxes deploy --public
+```
+
+应用收到的请求带请求头 `X-Oryn-Authenticated: owner=yes` 或 `owner=no`，应用可以据此判断访问者是不是你。
+
+## 设置运行时段
+
+在「Box 操作」菜单里选「运行时段…」，填「开机」「关机」时刻与「时区」；「清除时段」后一直运行。等价命令：
+
+```bash
+oryn boxes schedule workbench --on 08:00 --off 22:00 --tz Asia/Shanghai
+oryn boxes schedule workbench --clear
+```
+
+box 每天到开机时间启动、到关机时间停止。手动「启动 Box」「停止 Box」（或 `oryn boxes start`、`oryn boxes stop`）只保持到下一个时间点。停止时应用离线，磁盘和数据保留；停着的 box 上的线程不接收消息。
+
+## 下线应用与清除数据
+
+应用菜单里选「下线…」：应用停止并失去访问地址，数据目录保留。等价命令：
+
+```bash
+oryn boxes undeploy workbench --app wiki
+# 连数据目录一起删除；只能在执行环境之外运行
+oryn boxes undeploy workbench --app wiki --purge-data
+```
+
+删除整台 box 用 box 菜单里的「删除 Box…」或 `oryn boxes delete <box>`：box 上的全部应用和数据一并删除，无法恢复。`oryn boxes delete` 只能在执行环境之外运行，环境里的 Agent 不能删除 box。
+
+<Aside type="caution">
+`undeploy --purge-data` 与删除 box 都会永久删除数据。box 的数据就是那台机器的磁盘，没有另外的副本。
+</Aside>
+
+## 给应用加悬停预览
+
+在应用根页面的 `<head>` 里声明：
+
+```html
+<meta name="oryn-preview" content="v1; enabled; iframe">
+```
+
+之后在 box 页把鼠标悬停在应用徽标上，显示应用的实时预览。预览请求带 `?oryn-preview=light` 或 `?oryn-preview=dark` 参数，应用可以据此调整样式。Oryn 每 5 分钟重新检查一次各应用的这个声明；检查时不带 Cookie，看到的与匿名访客相同。
+
+## 改名
+
+```bash
+oryn boxes rename workbench tools
+```
+
+改名后应用地址不变。命令同时改写当前仓库 `.oryn/box-deploy.json` 里指向旧名的目标。box 菜单里的「改名…」做同样的事。
+
+## 限制
+
+| 项 | 上限 |
+|---|---|
+| 每个应用保留的 release | 3 个（当前加前两个） |
+| 每个应用的密钥与环境变量 | 64 个 |
+| 单个值 | 64 KiB |
+| 一个应用全部密钥（名字加值） | 1 MiB |
+| `logs --tail` | 1048576 字节，缺省 65536 |
+| `exec --timeout` | 缺省 600 秒；环境内 1800 秒，环境外 3600 秒 |
+| 激活、回滚、重启时等待端口监听 | 60 秒 |
+
+## 相关
+
+- [认识 Boxes](/guide/boxes/overview/)
+- [部署第一个应用](/guide/boxes/deploy-app/)
+- [在 box 上开线程](/guide/boxes/threads-on-box/)
+- [`.oryn/box.yaml` 参考](/reference/project-files/box-yaml/)

@@ -1,0 +1,85 @@
+---
+title: 在 box 上开线程
+description: 把线程直接开在 box 或某个应用的线上目录上排查线上问题，以及在 box 上改过代码后，新部署的保护与 --discard-box-changes。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '## Boxes'
+  - file: README.md
+    section: '## Boxes'
+  - file: internal/orbdrt/boxapps.go
+  - file: internal/orbdrt/assets/oryn-boxes/SKILL.md
+  - file: cmd/oryn/boxes_deploy.go
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+线程可以直接开在一台 box 上，而不是开在线程自己的执行环境（orb）里：Agent 操作的就是线上运行的应用和它的数据。排查线上数据、看线上配置时，用这种方式，不用另配一套环境。
+
+## 选择工作目录
+
+在 box 上开的线程有两种工作目录：
+
+| 工作目录 | 路径 | 用途 |
+|---|---|---|
+| 机器 | `~` | 操作整台 box |
+| 某个应用的线上目录 | `~/apps/<应用>/current` | 直接操作这个应用当前运行的 release 与数据 |
+
+## 从 box 页开线程
+
+在 box 页用「在这个应用上开线程」或「在这台机器上开线程」。确认对话框提示「线程直接操作线上的应用和它的数据。」，点「开线程」。
+
+box 已停止时，先在 box 页「启动 Box」。
+
+## 从首屏开线程
+
+首屏输入框的执行位置里有「Boxes」分组：选「机器」把线程开在整台 box 上，选某个应用则开在它的线上目录上。执行位置的选择见[新建线程与选择执行位置](/guide/threads/new-thread/)。
+
+## 用命令行开线程
+
+```bash
+# 开在应用 wiki 的线上目录
+oryn thread new --box workbench --app wiki "排查线上慢查询"
+# 开在整台 box 上
+oryn thread new --box workbench "检查磁盘占用"
+```
+
+`--box` 接 box 名或 id，与 `--runner`、`--orb`、`--provider`、`--type` 互斥；`--app` 只能与 `--box` 同用。参数见 [`oryn thread`](/reference/cli/thread/)。
+
+## 在 box 上改了代码之后再部署
+
+应用的 release 带源码时（`.oryn/box.yaml` 里 `source` 为缺省的 `true`），box 上的线程可以直接改线上目录里的代码。之后从别的线程再部署这个应用，box 会先检查线上代码：
+
+- 线上目录有未提交的改动；或
+- 线上目录里有提交，但它不在要部署的分支里。
+
+两种情况下新的部署都会被拒绝，错误码 `box_changes`，线上仍是原来的 release。处理方式二选一：
+
+- **保留这些改动**：在 box 上的线程里提交，并推送到部署所用的分支，再重新部署。
+- **确认不需要**：部署时加 `--discard-box-changes`，丢弃 box 上线上 release 里未推送的改动：
+
+  ```bash
+  oryn boxes deploy --discard-box-changes
+  ```
+
+用 `--move` 把应用改绑到另一个仓库时，两边历史不相干，无法与 box 上的代码比对，必须同时加 `--discard-box-changes`。
+
+<Aside type="caution">
+`--discard-box-changes` 会丢掉 box 上没有推送的改动。先确认这些改动已经推送或不再需要。
+</Aside>
+
+## 限制
+
+- 停着的 box 上的线程不接收消息，要先在 Boxes 页启动这台 box。
+- 全自动线程（定时任务、GitHub 触发的线程）不能使用 box。
+- 同一台 box 上的应用与开在这台 box 上的线程以同一个用户运行，彼此没有隔离。
+
+## 相关
+
+- [认识 Boxes](/guide/boxes/overview/)
+- [管理应用：密钥、回滚、日志与运行时段](/guide/boxes/manage-apps/)
+- [部署第一个应用](/guide/boxes/deploy-app/)
