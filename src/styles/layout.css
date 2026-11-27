@@ -1,0 +1,41 @@
+/*
+ * 版式：收窄左侧导航与右侧目录，把宽度让给正文。
+ * Starlight 的左栏和目录共用 --sl-sidebar-width；这里给目录单独一个宽度，
+ * 并按 Starlight TwoColumnContent 的同一套公式重算两栏（本文件不在 @layer 里，优先于其样式）。
+ */
+:root {
+	--sl-sidebar-width: 16rem;
+	--sl-content-width: 52rem;
+	--oryn-toc-width: 14rem;
+}
+
+@media (min-width: 72rem) {
+	.right-sidebar-container {
+		width: max(
+			var(--oryn-toc-width),
+			calc(var(--oryn-toc-width) + (100% - var(--sl-content-width) - var(--oryn-toc-width)) / 2)
+		);
+	}
+
+	[data-has-sidebar][data-has-toc] .main-pane {
+		width: min(
+			calc(100% - var(--oryn-toc-width)),
+			calc(var(--sl-content-width) + (100% - var(--sl-content-width) - var(--oryn-toc-width)) / 2)
+		);
+	}
+}
+
+/* 首页：hero 不带侧图时占满整行，产品截图放在 hero 下方按原比例显示 */
+.hero:not(:has(> img)) {
+	grid-template-columns: 100%;
+	padding-block: clamp(2rem, calc(1rem + 6vmin), 5rem) 0.5rem;
+}
+
+.home-shot .oryn-shot {
+	margin-block: 0 2.5rem;
+}
+
+.home-shot .oryn-shot img {
+	border: 1px solid var(--sl-color-hairline);
+	border-radius: 0.75rem;
+}

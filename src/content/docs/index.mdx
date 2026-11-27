@@ -4,10 +4,6 @@ description: Oryn 的使用、部署与参考文档。
 template: splash
 hero:
   tagline: 自托管的 Coding Agent 工作台：每个线程一台隔离环境，在浏览器、桌面、手机与终端里接续同一份工作。
-  image:
-    alt: Oryn 工作台：左侧是线程列表，中间是对话与工具卡，右侧是工程面板
-    light: ../../assets/shots/readme/hero-light.webp
-    dark: ../../assets/shots/readme/hero-dark.webp
   actions:
     - text: 快速开始
       link: /start/quickstart/
@@ -18,6 +14,11 @@ hero:
 ---
 
 import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+import Shot from '@/components/Shot.astro';
+
+<div class="home-shot">
+	<Shot id="readme/workbench" alt="Oryn 工作台：左侧是线程列表，中间是对话与工具卡，右侧是信息面板" />
+</div>
 
 <CardGrid>
 	<LinkCard title="我要部署一套" description="组件构成、安装顺序与可选组件。" href="/admin/overview/" />

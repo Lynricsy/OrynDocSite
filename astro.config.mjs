@@ -35,7 +35,7 @@ export default defineConfig({
 			editLink: { baseUrl: 'https://github.com/Lynricsy/OrynDocSite/edit/main/' },
 			// Phoenix 构建只取单个 commit，git 时间不可靠
 			lastUpdated: false,
-			customCss: ['./src/styles/fonts.css', './src/styles/theme.css'],
+			customCss: ['./src/styles/fonts.css', './src/styles/theme.css', './src/styles/layout.css'],
 			components: { Footer: './src/components/Footer.astro' },
 			plugins: [
 				// API 端点页由 starlight-openapi 生成，不在内容集合里，校验器看不到
