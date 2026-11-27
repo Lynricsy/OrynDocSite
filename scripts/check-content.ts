@@ -50,7 +50,9 @@ for (const path of new Glob('**/*.{md,mdx}').scanSync(docsDir)) {
 	scanBroken(rel, text);
 	if (fm.generated === true) continue;
 
-	scanLeaks(rel, text);
+	// frontmatter 的 sources.section 必须照抄 Oryn 原标题（可能带里程碑标签），只查正文
+	const body = text.replace(/^---\r?\n[\s\S]*?\r?\n---/, (fm) => '\n'.repeat(fm.split('\n').length - 1));
+	scanLeaks(rel, body);
 
 	if (path.endsWith('.mdx') && path !== 'index.mdx') {
 		if (!fm.type) problems.push(`${rel}: 缺少 type`);

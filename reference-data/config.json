@@ -1,0 +1,932 @@
+{
+  "orynd": [
+    {
+      "path": "listen",
+      "goType": "[]string",
+      "object": false,
+      "doc": "",
+      "goName": "Listen"
+    },
+    {
+      "path": "public_url",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "PublicURL"
+    },
+    {
+      "path": "portal_domain",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "PortalDomain"
+    },
+    {
+      "path": "data_dir",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "DataDir"
+    },
+    {
+      "path": "log_level",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "LogLevel"
+    },
+    {
+      "path": "idle",
+      "goType": "Idle",
+      "object": true,
+      "doc": "",
+      "goName": "Idle"
+    },
+    {
+      "path": "idle.agent_idle",
+      "goType": "Duration",
+      "object": false,
+      "doc": "",
+      "goName": "AgentIdle"
+    },
+    {
+      "path": "idle.user_idle",
+      "goType": "Duration",
+      "object": false,
+      "doc": "",
+      "goName": "UserIdle"
+    },
+    {
+      "path": "idle.stop_after_frozen",
+      "goType": "Duration",
+      "object": false,
+      "doc": "",
+      "goName": "StopAfterFrozen"
+    },
+    {
+      "path": "idle.wake_on_focus",
+      "goType": "bool",
+      "object": false,
+      "doc": "",
+      "goName": "WakeOnFocus"
+    },
+    {
+      "path": "orb_defaults",
+      "goType": "OrbDefaults",
+      "object": true,
+      "doc": "",
+      "goName": "OrbDefaults"
+    },
+    {
+      "path": "orb_defaults.provider",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "Provider"
+    },
+    {
+      "path": "orb_defaults.type",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "Type"
+    },
+    {
+      "path": "push",
+      "goType": "Push",
+      "object": true,
+      "doc": "",
+      "goName": "Push"
+    },
+    {
+      "path": "push.gateway",
+      "goType": "Gateway",
+      "object": true,
+      "doc": "",
+      "goName": "Gateway"
+    },
+    {
+      "path": "push.gateway.url",
+      "goType": "string",
+      "object": false,
+      "doc": "URL 是网关的 origin（不带路径）：https，或回环主机的 http（本机验收）；空串 = 关闭网关。",
+      "goName": "URL"
+    },
+    {
+      "path": "coordinator",
+      "goType": "Coordinator",
+      "object": true,
+      "doc": "",
+      "goName": "Coordinator"
+    },
+    {
+      "path": "coordinator.omp_path",
+      "goType": "string",
+      "object": false,
+      "doc": "OmpPath 是宿主上的 omp 二进制（与 orb 镜像同一份发布产物）。",
+      "goName": "OmpPath"
+    },
+    {
+      "path": "coordinator.dir",
+      "goType": "string",
+      "object": false,
+      "doc": "Dir 是协调宿主的工作目录（omp 副本、HOME、host.log）；空 = \u003cdata_dir\u003e/coordinator。",
+      "goName": "Dir"
+    },
+    {
+      "path": "coordinator.user",
+      "goType": "string",
+      "object": false,
+      "doc": "User 是 orynd 以 root 运行时协调宿主降权到的账号。空（缺省）、nobody、nfsnobody 或 uid 65534 的账号 = 自动：使用（必要时用 useradd 创建）本实例专用的系统账号 oryn-coord-\u003c协调目录路径的 fnv32a\u003e。写别的名字则用该账号（须不是 root，且不被本实例以外的进程使用）。",
+      "goName": "User"
+    },
+    {
+      "path": "coordinator.egress_port",
+      "goType": "int",
+      "object": false,
+      "doc": "EgressPort 是协调宿主内模型代理监听的回环端口。",
+      "goName": "EgressPort"
+    },
+    {
+      "path": "coordinator.verify_omp",
+      "goType": "*bool",
+      "object": false,
+      "doc": "VerifyOmp 为 nil 或 true 时校验 omp 的 sha256 与 core/source.json 一致。",
+      "goName": "VerifyOmp"
+    },
+    {
+      "path": "coordinator.model",
+      "goType": "string",
+      "object": false,
+      "doc": "Model 是协调对话的默认模型（\"provider/id\"）；空 = omp 配置的默认模型。",
+      "goName": "Model"
+    },
+    {
+      "path": "coordinator.web_allow_hosts",
+      "goType": "[]string",
+      "object": false,
+      "doc": "WebAllowHosts 是全局助手联网时允许连接的非公网目标（M19）：小写的 host 或 host:port，只对域名有意义；不在表里的目标若解析到回环、私网、链路本地等地址，正向代理一律拒绝。",
+      "goName": "WebAllowHosts"
+    },
+    {
+      "path": "schedule",
+      "goType": "Schedule",
+      "object": true,
+      "doc": "",
+      "goName": "Schedule"
+    },
+    {
+      "path": "schedule.deliver_timeout",
+      "goType": "Duration",
+      "object": false,
+      "doc": "",
+      "goName": "DeliverTimeout"
+    },
+    {
+      "path": "schedule.max_failures",
+      "goType": "int",
+      "object": false,
+      "doc": "",
+      "goName": "MaxFailures"
+    },
+    {
+      "path": "stats",
+      "goType": "Stats",
+      "object": true,
+      "doc": "",
+      "goName": "Stats"
+    },
+    {
+      "path": "stats.retention",
+      "goType": "StatsRetention",
+      "object": true,
+      "doc": "",
+      "goName": "Retention"
+    },
+    {
+      "path": "stats.retention.samples",
+      "goType": "Duration",
+      "object": false,
+      "doc": "Samples 是 orb 资源采样（orb_samples）的保留期。",
+      "goName": "Samples"
+    },
+    {
+      "path": "stats.retention.events",
+      "goType": "Duration",
+      "object": false,
+      "doc": "Events 是已删除 orb 的事件与 setup 记录、预算告警账本的保留期（活 orb 的事件永不删）。",
+      "goName": "Events"
+    },
+    {
+      "path": "stats.retention.usage",
+      "goType": "Duration",
+      "object": false,
+      "doc": "Usage 是用量 / 工具调用 / 回合事实行的保留期。",
+      "goName": "Usage"
+    },
+    {
+      "path": "snapshots",
+      "goType": "Snapshots",
+      "object": true,
+      "doc": "",
+      "goName": "Snapshots"
+    },
+    {
+      "path": "snapshots.enabled",
+      "goType": "bool",
+      "object": false,
+      "doc": "Enabled 是全局开关；关闭后既不建立也不使用项目快照（项目自己的开关之上）。",
+      "goName": "Enabled"
+    },
+    {
+      "path": "snapshots.max_age",
+      "goType": "Duration",
+      "object": false,
+      "doc": "MaxAge 是一条快照血统（从基础镜像全新 setup 起算，刷新不重置）的最长复用时间。",
+      "goName": "MaxAge"
+    },
+    {
+      "path": "snapshots.max_depth",
+      "goType": "int",
+      "object": false,
+      "doc": "MaxDepth 是同一血统内的刷新次数上限，超过即退役、下次从基础镜像重建。",
+      "goName": "MaxDepth"
+    },
+    {
+      "path": "snapshots.min_setup",
+      "goType": "Duration",
+      "object": false,
+      "doc": "MinSetup 是值得建立新血统的最短 setup 耗时；更快的 setup 不建快照。",
+      "goName": "MinSetup"
+    },
+    {
+      "path": "snapshots.max_total_gb",
+      "goType": "int",
+      "object": false,
+      "doc": "MaxTotalGB 是每个 provider 上项目快照（相对基础镜像）合计占用的上限。",
+      "goName": "MaxTotalGB"
+    },
+    {
+      "path": "snapshots.max_snapshot_gb",
+      "goType": "int",
+      "object": false,
+      "doc": "MaxSnapshotGB 是单个快照（相对基础镜像）的大小上限；超出即退役删除，不挤占其它快照。 0 = 未设置：取 min(DefaultMaxSnapshotGB, MaxTotalGB)，见 MaxSnapshotBytes。",
+      "goName": "MaxSnapshotGB"
+    },
+    {
+      "path": "pool",
+      "goType": "Pool",
+      "object": true,
+      "doc": "",
+      "goName": "Pool"
+    },
+    {
+      "path": "pool.max_total",
+      "goType": "int",
+      "object": false,
+      "doc": "MaxTotal 是全局预热 orb（warming + idle）上限；0 = 关闭预热池。",
+      "goName": "MaxTotal"
+    },
+    {
+      "path": "pool.max_age",
+      "goType": "Duration",
+      "object": false,
+      "doc": "MaxAge 是 idle 池 orb 的最长存活时间，到期回收换新。",
+      "goName": "MaxAge"
+    },
+    {
+      "path": "pool.active_window",
+      "goType": "Duration",
+      "object": false,
+      "doc": "ActiveWindow 是项目「活跃」的判定窗口：窗口内没有新线程的项目不预热。",
+      "goName": "ActiveWindow"
+    },
+    {
+      "path": "orb_tls",
+      "goType": "OrbTLS",
+      "object": true,
+      "doc": "",
+      "goName": "OrbTLS"
+    },
+    {
+      "path": "orb_tls.listen",
+      "goType": "[]string",
+      "object": false,
+      "doc": "Listen 是 TLS 监听地址（host:port，host 必须是 IP，例如 172.18.0.1:7643）；这些 IP 总会写进服务端证书。",
+      "goName": "Listen"
+    },
+    {
+      "path": "orb_tls.hosts",
+      "goType": "[]string",
+      "object": false,
+      "doc": "Hosts 是服务端证书里额外的 SAN（主机名或 IP）。",
+      "goName": "Hosts"
+    },
+    {
+      "path": "github",
+      "goType": "GitHub",
+      "object": true,
+      "doc": "",
+      "goName": "GitHub"
+    },
+    {
+      "path": "github.api_url",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "APIURL"
+    },
+    {
+      "path": "github.web_url",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "WebURL"
+    },
+    {
+      "path": "artifacts",
+      "goType": "Artifacts",
+      "object": true,
+      "doc": "",
+      "goName": "Artifacts"
+    },
+    {
+      "path": "artifacts.render",
+      "goType": "ArtifactsRender",
+      "object": true,
+      "doc": "",
+      "goName": "Render"
+    },
+    {
+      "path": "artifacts.render.chromium",
+      "goType": "string",
+      "object": false,
+      "doc": "Chromium 是可执行文件路径；空 = 依次在 PATH 里找 chromium、chromium-browser、google-chrome-stable、google-chrome。",
+      "goName": "Chromium"
+    },
+    {
+      "path": "artifacts.render.user",
+      "goType": "string",
+      "object": false,
+      "doc": "User 是 orynd 以 root 运行时跑 Chromium 的账号（不能是 root）；root 下为空则渲染停用。非 root 时不用。",
+      "goName": "User"
+    },
+    {
+      "path": "artifacts.render.no_sandbox",
+      "goType": "bool",
+      "object": false,
+      "doc": "NoSandbox 为真时给 Chromium 传 --no-sandbox：只在 orynd 自己跑在专用容器里、Chromium 的命名空间沙箱起不来时才打开。",
+      "goName": "NoSandbox"
+    },
+    {
+      "path": "artifacts.render.concurrency",
+      "goType": "int",
+      "object": false,
+      "doc": "Concurrency 是同时运行的 Chromium 上限；0（缺省）= 2。",
+      "goName": "Concurrency"
+    },
+    {
+      "path": "artifacts.render.dir",
+      "goType": "string",
+      "object": false,
+      "doc": "Dir 是作业目录的上级目录；空 = \u003cdata_dir\u003e/artifacts/render。渲染账号必须能进入它的每一级上级目录（data_dir 是 root 的 0700 目录时，要设到 /var/tmp/oryn-render 这类位置）。",
+      "goName": "Dir"
+    },
+    {
+      "path": "artifacts.office",
+      "goType": "ArtifactsOffice",
+      "object": true,
+      "doc": "",
+      "goName": "Office"
+    },
+    {
+      "path": "artifacts.office.url",
+      "goType": "string",
+      "object": false,
+      "doc": "URL 是浏览器访问引擎的地址（编辑器 iframe 与表单提交的目标）；空 = 不启用引擎。",
+      "goName": "URL"
+    },
+    {
+      "path": "artifacts.office.internal_url",
+      "goType": "string",
+      "object": false,
+      "doc": "InternalURL 是控制面访问引擎的地址（discovery、能力、转换）；空 = 同 URL。",
+      "goName": "InternalURL"
+    },
+    {
+      "path": "artifacts.office.wopi_base",
+      "goType": "string",
+      "object": false,
+      "doc": "WOPIBase 是引擎回调控制面 WOPI 端点的地址；空 = public_url。",
+      "goName": "WOPIBase"
+    },
+    {
+      "path": "repos",
+      "goType": "Repos",
+      "object": true,
+      "doc": "",
+      "goName": "Repos"
+    },
+    {
+      "path": "repos.git",
+      "goType": "string",
+      "object": false,
+      "doc": "Git 是 git 可执行文件；空 = 在 PATH 里找 git（不带斜杠的名字也按 PATH 查找）。",
+      "goName": "Git"
+    },
+    {
+      "path": "repos.max_mirror_gb",
+      "goType": "int",
+      "object": false,
+      "doc": "MaxMirrorGB 是单个镜像的大小上限；0（缺省）= 5。拉取后超出即删除镜像并记 too_large。",
+      "goName": "MaxMirrorGB"
+    },
+    {
+      "path": "repos.min_free_gb",
+      "goType": "int",
+      "object": false,
+      "doc": "MinFreeGB 是数据盘要保留的可用空间：低于它时不克隆、不拉取、不接受推送；0（缺省）= 2。",
+      "goName": "MinFreeGB"
+    },
+    {
+      "path": "repos.max_lfs_cache_gb",
+      "goType": "int",
+      "object": false,
+      "doc": "MaxLFSCacheGB 是镜像项目 Git LFS 对象缓存的总上限（所有项目合计，按最近使用淘汰）；0（缺省）= 2。",
+      "goName": "MaxLFSCacheGB"
+    },
+    {
+      "path": "sandbox",
+      "goType": "Sandbox",
+      "object": true,
+      "doc": "",
+      "goName": "Sandbox"
+    },
+    {
+      "path": "sandbox.enabled",
+      "goType": "bool",
+      "object": false,
+      "doc": "",
+      "goName": "Enabled"
+    },
+    {
+      "path": "sandbox.max_per_orb",
+      "goType": "int",
+      "object": false,
+      "doc": "MaxPerOrb 是每台 owner orb 同时在用的沙箱上限；MaxTotal 是全局上限。",
+      "goName": "MaxPerOrb"
+    },
+    {
+      "path": "sandbox.max_total",
+      "goType": "int",
+      "object": false,
+      "doc": "",
+      "goName": "MaxTotal"
+    },
+    {
+      "path": "sandbox.idle",
+      "goType": "Duration",
+      "object": false,
+      "doc": "Idle 是缺省空闲超时（创建时可设 5–240 分钟覆盖）；MaxLifetime 是最长寿命硬上限。",
+      "goName": "Idle"
+    },
+    {
+      "path": "sandbox.max_lifetime",
+      "goType": "Duration",
+      "object": false,
+      "doc": "",
+      "goName": "MaxLifetime"
+    },
+    {
+      "path": "sandbox.default_backend",
+      "goType": "string",
+      "object": false,
+      "doc": "DefaultBackend 是 backend 省略时优先选的后端：kvm 或 docker。",
+      "goName": "DefaultBackend"
+    }
+  ],
+  "provider": [
+    {
+      "path": "url",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "URL"
+    },
+    {
+      "path": "token_file",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "TokenFile"
+    },
+    {
+      "path": "orb_url",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "OrbURL"
+    },
+    {
+      "path": "driver",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "Driver"
+    },
+    {
+      "path": "docker",
+      "goType": "Docker",
+      "object": true,
+      "doc": "",
+      "goName": "Docker"
+    },
+    {
+      "path": "docker.image",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "Image"
+    },
+    {
+      "path": "docker.extra_run_args",
+      "goType": "[]string",
+      "object": false,
+      "doc": "",
+      "goName": "ExtraRunArgs"
+    },
+    {
+      "path": "docker.types",
+      "goType": "map[string]DockerType",
+      "object": false,
+      "doc": "",
+      "goName": "Types"
+    },
+    {
+      "path": "docker.types.\u003c名称\u003e.cpus",
+      "goType": "float64",
+      "object": false,
+      "doc": "",
+      "goName": "CPUs"
+    },
+    {
+      "path": "docker.types.\u003c名称\u003e.memory",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "Memory"
+    },
+    {
+      "path": "docker.types.\u003c名称\u003e.runtime",
+      "goType": "string",
+      "object": false,
+      "doc": "Runtime 是 `docker run --runtime` 的值（M11a）；只接受空（Docker 默认）或 sysbox-runc。",
+      "goName": "Runtime"
+    },
+    {
+      "path": "docker.types.\u003c名称\u003e.nested_docker",
+      "goType": "bool",
+      "object": false,
+      "doc": "NestedDocker 为 true 时该类型的 orb 内由 orbd 监督 dockerd（M11a）；要求 Runtime 为 sysbox-runc。",
+      "goName": "NestedDocker"
+    },
+    {
+      "path": "docker.default_type",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "DefaultType"
+    },
+    {
+      "path": "docker.pids_limit",
+      "goType": "int",
+      "object": false,
+      "doc": "PidsLimit 是所有类型的 `docker run --pids-limit`（M11a 审查修复）；缺省 4096，0 = 不限。",
+      "goName": "PidsLimit"
+    },
+    {
+      "path": "docker.sandbox",
+      "goType": "DockerSandbox",
+      "object": true,
+      "doc": "Sandbox 是 docker 后端的 agent 沙箱设置（M30）。",
+      "goName": "Sandbox"
+    },
+    {
+      "path": "docker.sandbox.enabled",
+      "goType": "bool",
+      "object": false,
+      "doc": "",
+      "goName": "Enabled"
+    },
+    {
+      "path": "docker.sandbox.network",
+      "goType": "string",
+      "object": false,
+      "doc": "Network 是 egress 模式接入的 docker 网络（由 deploy/docker/oryn-sbx-net.sh 建立）；Enabled 时必填。",
+      "goName": "Network"
+    },
+    {
+      "path": "docker.sandbox.dns",
+      "goType": "[]string",
+      "object": false,
+      "doc": "DNS 是 egress 模式的 --dns，每项须是 IP。",
+      "goName": "DNS"
+    },
+    {
+      "path": "docker.sandbox.socket_dir",
+      "goType": "string",
+      "object": false,
+      "doc": "SocketDir 存各沙箱的 link 中继 socket（\u003csocket_dir\u003e/\u003corbId\u003e/link.sock）；须是绝对路径，缺省 DefaultSandboxSocketDir。",
+      "goName": "SocketDir"
+    },
+    {
+      "path": "dispatch",
+      "goType": "Dispatch",
+      "object": true,
+      "doc": "",
+      "goName": "Dispatch"
+    },
+    {
+      "path": "dispatch.script",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "Script"
+    },
+    {
+      "path": "firecracker",
+      "goType": "Firecracker",
+      "object": true,
+      "doc": "",
+      "goName": "Firecracker"
+    },
+    {
+      "path": "firecracker.bin",
+      "goType": "string",
+      "object": false,
+      "doc": "Bin / Jailer 是 firecracker 与 jailer 可执行文件。",
+      "goName": "Bin"
+    },
+    {
+      "path": "firecracker.jailer",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "Jailer"
+    },
+    {
+      "path": "firecracker.kernel",
+      "goType": "string",
+      "object": false,
+      "doc": "Kernel / Rootfs 是 guest 内核（vmlinux）与只读根盘（ext4）；须与 StateDir 在同一文件系统（驱动硬链接它们）。",
+      "goName": "Kernel"
+    },
+    {
+      "path": "firecracker.rootfs",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "Rootfs"
+    },
+    {
+      "path": "firecracker.state_dir",
+      "goType": "string",
+      "object": false,
+      "doc": "StateDir 存基础盘、各 VM 的可写盘与元数据、快照、jailer 的 chroot 与槽位表。",
+      "goName": "StateDir"
+    },
+    {
+      "path": "firecracker.disk_gb",
+      "goType": "int",
+      "object": false,
+      "doc": "DiskGB 是每台 VM 可写盘（稀疏文件）的大小。",
+      "goName": "DiskGB"
+    },
+    {
+      "path": "firecracker.uid_base",
+      "goType": "int",
+      "object": false,
+      "doc": "UIDBase 是槽位 n 的 jailer uid / gid = UIDBase + n。默认 2000000000：避开 useradd 的 subuid 分配区（100000 起每段 65536，sysbox 默认 165536 起）和 systemd 的容器区（524288–1879048191）。",
+      "goName": "UIDBase"
+    },
+    {
+      "path": "firecracker.network",
+      "goType": "FirecrackerNetwork",
+      "object": true,
+      "doc": "",
+      "goName": "Network"
+    },
+    {
+      "path": "firecracker.network.cidr",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "CIDR"
+    },
+    {
+      "path": "firecracker.network.host_addr",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "HostAddr"
+    },
+    {
+      "path": "firecracker.network.dns",
+      "goType": "[]string",
+      "object": false,
+      "doc": "",
+      "goName": "DNS"
+    },
+    {
+      "path": "firecracker.limits",
+      "goType": "FirecrackerLimits",
+      "object": true,
+      "doc": "",
+      "goName": "Limits"
+    },
+    {
+      "path": "firecracker.limits.max_vms",
+      "goType": "int",
+      "object": false,
+      "doc": "",
+      "goName": "MaxVMs"
+    },
+    {
+      "path": "firecracker.limits.max_memory_mb",
+      "goType": "int",
+      "object": false,
+      "doc": "",
+      "goName": "MaxMemoryMB"
+    },
+    {
+      "path": "firecracker.types",
+      "goType": "map[string]FirecrackerType",
+      "object": false,
+      "doc": "Types 是 orb 规格表；未写时取 DefaultFirecrackerTypes。",
+      "goName": "Types"
+    },
+    {
+      "path": "firecracker.types.\u003c名称\u003e.cpus",
+      "goType": "int",
+      "object": false,
+      "doc": "",
+      "goName": "CPUs"
+    },
+    {
+      "path": "firecracker.types.\u003c名称\u003e.memory",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "Memory"
+    },
+    {
+      "path": "firecracker.default_type",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "DefaultType"
+    },
+    {
+      "path": "firecracker.sandbox",
+      "goType": "FirecrackerSandbox",
+      "object": true,
+      "doc": "Sandbox 是 kvm 后端的 agent 沙箱设置（M30）。",
+      "goName": "Sandbox"
+    },
+    {
+      "path": "firecracker.sandbox.enabled",
+      "goType": "bool",
+      "object": false,
+      "doc": "",
+      "goName": "Enabled"
+    }
+  ],
+  "pushGateway": [
+    {
+      "path": "listen",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "Listen"
+    },
+    {
+      "path": "public_origin",
+      "goType": "string",
+      "object": false,
+      "doc": "PublicOrigin 是客户端看到的网关 origin（签名输入的一部分）：https，或回环主机的 http；不带路径。",
+      "goName": "PublicOrigin"
+    },
+    {
+      "path": "data_dir",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "DataDir"
+    },
+    {
+      "path": "log_level",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "LogLevel"
+    },
+    {
+      "path": "apns",
+      "goType": "APNs",
+      "object": true,
+      "doc": "",
+      "goName": "APNs"
+    },
+    {
+      "path": "apns.key_file",
+      "goType": "string",
+      "object": false,
+      "doc": "KeyFile 是 Apple Developer 下载的 AuthKey_\u003cKeyID\u003e.p8。",
+      "goName": "KeyFile"
+    },
+    {
+      "path": "apns.key_id",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "KeyID"
+    },
+    {
+      "path": "apns.team_id",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "TeamID"
+    },
+    {
+      "path": "apns.topic",
+      "goType": "string",
+      "object": false,
+      "doc": "Topic 是 App 的 bundle id，也是 challenge 里 appId 必须等于的值。",
+      "goName": "Topic"
+    },
+    {
+      "path": "apns.environments",
+      "goType": "[]string",
+      "object": false,
+      "doc": "Environments 是接受的 APNs 环境（production / sandbox）；为空时两者都接受。",
+      "goName": "Environments"
+    },
+    {
+      "path": "fcm",
+      "goType": "FCM",
+      "object": true,
+      "doc": "",
+      "goName": "FCM"
+    },
+    {
+      "path": "fcm.service_account_file",
+      "goType": "string",
+      "object": false,
+      "doc": "",
+      "goName": "ServiceAccountFile"
+    },
+    {
+      "path": "fcm.app_id",
+      "goType": "string",
+      "object": false,
+      "doc": "AppID 是 Android 应用标识（包名），challenge 里 appId 必须等于它。",
+      "goName": "AppID"
+    },
+    {
+      "path": "limits",
+      "goType": "Limits",
+      "object": true,
+      "doc": "",
+      "goName": "Limits"
+    },
+    {
+      "path": "limits.grant_per_minute",
+      "goType": "int",
+      "object": false,
+      "doc": "",
+      "goName": "GrantPerMinute"
+    },
+    {
+      "path": "limits.grant_per_day",
+      "goType": "int",
+      "object": false,
+      "doc": "",
+      "goName": "GrantPerDay"
+    },
+    {
+      "path": "limits.host_per_minute",
+      "goType": "int",
+      "object": false,
+      "doc": "",
+      "goName": "HostPerMinute"
+    },
+    {
+      "path": "limits.challenges_per_ip_hour",
+      "goType": "int",
+      "object": false,
+      "doc": "",
+      "goName": "ChallengesPerIPHour"
+    }
+  ]
+}

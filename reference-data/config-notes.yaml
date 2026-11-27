@@ -1,0 +1,371 @@
+# 配置参考的手写补充：默认值、约束、运行时覆盖与（字段注释为空时的）说明。
+# 键集合必须与 reference-data/config.json 中各文件的叶子键完全一致；scripts/gen-config.ts 据此生成参考页。
+# 默认值读自 internal/config/config.go（DefaultOrynd、LoadProvider、DefaultDockerTypes）、
+# internal/config/firecracker.go（DefaultFirecracker、DefaultFirecrackerTypes）、internal/pushgw/config.go（DefaultConfig）；
+# 约束读自各自的校验函数；runtimeOverride 读自 internal/opsconf/opsconf.go 的 Fields。
+
+orynd:
+  listen:
+    default: '`["127.0.0.1:7600"]`'
+    constraint: 不能为空；每项须是 `host:port`
+    doc: 控制面的监听地址列表（`host:port`）。环境（orb）不经反代、直连这里；与 Docker Provider 同机部署时通常再加一项 docker0 网桥地址（如 `172.17.0.1:7600`，用 `ip -4 addr show docker0` 查看）。
+  public_url:
+    default: （必填）
+    constraint: 须是绝对 URL
+    doc: 浏览器访问 Oryn 的地址，如 `https://oryn.example.com`。WebAuthn 的 RP ID 取它的主机名，必须与浏览器访问地址一致；Portal 地址沿用它的协议与端口。
+  portal_domain:
+    default: 空
+    constraint: 须是小写主机名，不带协议、端口与尾点；`public_url` 的主机名不得是 `<单标签>.<portal_domain>`，等于 `portal_domain` 本身是允许的
+    doc: Portal 泛域名，如 `orb.example.com`。受管服务的 Portal 地址、Boxes 应用地址、Artifact 隔离帧与发布页都在 `*.<portal_domain>` 之下。空 = 不启用 Portal。
+  data_dir:
+    default: '`/var/lib/oryn`'
+    constraint: 不能为空
+    doc: 控制面数据目录：`oryn.db`、密钥库的 `master.key`、项目仓库镜像与托管仓库所在的 `repos/` 都在这里，备份时必须包含 `repos/`。相对路径按启动时的工作目录转成绝对路径。
+  log_level:
+    default: '`info`'
+    constraint: 取 `debug`、`info`、`warn`、`error` 之一
+    doc: 控制面的日志级别。
+  idle.agent_idle:
+    default: '`5m`'
+    constraint: 须为正
+    runtimeOverride: true
+    doc: Agent 空闲多久后冻结环境。运行中的环境在 Agent 空闲达到本值、且用户空闲达到 `user_idle` 时自动冻结。
+  idle.user_idle:
+    default: '`20m`'
+    constraint: 须为正
+    runtimeOverride: true
+    doc: 用户空闲多久后冻结环境，与 `agent_idle` 同时满足才冻结。已授权的 Portal 请求（含公开访客）也计为用户交互。
+  idle.stop_after_frozen:
+    default: '`24h`'
+    constraint: 须为正
+    runtimeOverride: true
+    doc: 环境冻结超过本值后转为停机。停机保留磁盘状态，唤醒要冷启动。
+  idle.wake_on_focus:
+    default: '`true`'
+    runtimeOverride: true
+    doc: 打开线程页时是否唤醒冻结的环境。已停机的环境不会因此唤醒：文件面板只读浏览，发消息或点「唤醒」后才冷启动。
+  orb_defaults.provider:
+    default: 空
+    constraint: 不能是保留名 `@host`
+    doc: 新建环境时省略 Provider 所用的 Provider 名称。确定顺序：显式指定 → 项目默认 → 本键 → 源环境的 Provider → 唯一可用的 Provider。空 = 不设。
+  orb_defaults.type:
+    default: 空
+    doc: 新建环境时省略类型所用的类型名称。确定顺序：显式指定 → 项目默认 → 本键 → Provider 的 `default_type`。空 = 不设。
+  push.gateway.url:
+    default: '`https://push.oryn.best`'
+    constraint: 空串，或不带路径、查询串、用户信息与结尾斜杠的 origin：`https://…`，或回环主机（`localhost` 或回环 IP）的 `http://…`
+  coordinator.omp_path:
+    default: '`/usr/local/lib/oryn/omp`'
+    constraint: 不能为空
+  coordinator.dir:
+    default: 空
+  coordinator.user:
+    default: 空
+  coordinator.egress_port:
+    default: '`7811`'
+    constraint: 1–65535
+  coordinator.verify_omp:
+    default: '`true`'
+    doc: 为 `true`（或不写）时，orynd 核对 omp 的 sha256 与编进 orynd 的 `core/source.json` 是否一致，不一致时协调功能不可用。本地改过 Core、确实要用自己的构建时设为 `false`。
+  coordinator.model:
+    default: 空
+    constraint: 非空时须是 `provider/id` 形式
+  coordinator.web_allow_hosts:
+    default: '`[]`'
+  schedule.deliver_timeout:
+    default: '`10m`'
+    constraint: 至少 `1m`
+    doc: 线程内定时任务一次投递的超时时间，超时的运行记为失败（`deliver_timeout`）。
+  schedule.max_failures:
+    default: '`3`'
+    constraint: 至少为 1
+    doc: 定时任务连续失败多少次后自动暂停并发出通知。
+  stats.retention.samples:
+    default: '`720h`'
+    constraint: 为 `0`（永久）或至少 `24h`
+    runtimeOverride: true
+  stats.retention.events:
+    default: '`8760h`'
+    constraint: 为 `0`（永久）或至少 `24h`
+    runtimeOverride: true
+  stats.retention.usage:
+    default: '`0s`（永久）'
+    constraint: 为 `0`（永久）或至少 `24h`
+    runtimeOverride: true
+  snapshots.enabled:
+    default: '`true`'
+  snapshots.max_age:
+    default: '`72h`'
+    constraint: 须为正
+  snapshots.max_depth:
+    default: '`16`'
+    constraint: 1–64
+  snapshots.min_setup:
+    default: '`10s`'
+    constraint: 须为正
+  snapshots.max_total_gb:
+    default: '`40`'
+    constraint: 至少为 1
+    runtimeOverride: true
+  snapshots.max_snapshot_gb:
+    default: '`0`（自动）'
+    constraint: '`0` 或 1 至 `max_total_gb`'
+    runtimeOverride: true
+    doc: 单个快照（相对基础镜像）的大小上限，单位 GB；超出即作废删除，不挤占其它快照。`0` = 未设置，取 10 与 `max_total_gb` 中较小的一个。
+  pool.max_total:
+    default: '`2`'
+    constraint: 0–16（`0` = 关闭预热池）
+  pool.max_age:
+    default: '`12h`'
+    constraint: 须为正
+  pool.active_window:
+    default: '`72h`'
+    constraint: 须为正
+  orb_tls.listen:
+    default: '`[]`（不开启）'
+    constraint: 每项为 `host:port`，主机部分须是 IP，端口 1–65535
+  orb_tls.hosts:
+    default: '`[]`'
+    constraint: 每项须是 IP 或合法主机名
+  github.api_url:
+    default: '`https://api.github.com`'
+    constraint: 须是带协议与主机的 http(s) 地址，不带查询串与片段；结尾的 `/` 会被去掉
+    doc: GitHub API 的上游地址。连接 github.com 时不需要改。
+  github.web_url:
+    default: '`https://github.com`'
+    constraint: 须是带协议与主机的 http(s) 地址，不带查询串与片段；结尾的 `/` 会被去掉
+    doc: GitHub 网页的上游地址，例如注册 OAuth App 的链接 `<web_url>/settings/applications/new`。连接 github.com 时不需要改。
+  artifacts.render.chromium:
+    default: 空
+  artifacts.render.user:
+    default: 空
+    constraint: 不能是 `root`
+  artifacts.render.no_sandbox:
+    default: '`false`'
+  artifacts.render.concurrency:
+    default: '`2`'
+    constraint: 0–16（`0` 按 2 处理）
+  artifacts.render.dir:
+    default: 空
+  artifacts.office.url:
+    default: 空
+    constraint: 须是不带路径与查询的 http(s) 绝对地址；结尾的 `/` 会被去掉
+  artifacts.office.internal_url:
+    default: 空
+    constraint: 须是不带路径与查询的 http(s) 绝对地址；需要同时配置 `artifacts.office.url`
+  artifacts.office.wopi_base:
+    default: 空
+    constraint: 须是不带路径与查询的 http(s) 绝对地址；需要同时配置 `artifacts.office.url`
+  repos.git:
+    default: 空
+  repos.max_mirror_gb:
+    default: '`5`'
+    constraint: 不能为负（`0` 按缺省值处理）
+    runtimeOverride: true
+  repos.min_free_gb:
+    default: '`2`'
+    constraint: 不能为负（`0` 按缺省值处理）
+    runtimeOverride: true
+  repos.max_lfs_cache_gb:
+    default: '`2`'
+    constraint: 不能为负（`0` 按缺省值处理）
+    runtimeOverride: true
+  sandbox.enabled:
+    default: '`true`'
+    doc: 控制面是否提供 Agent 沙箱。关掉后新建沙箱返回 `sandbox_disabled`，Agent 的系统提示里也不再有沙箱指引。Provider 默认不提供沙箱，须在 `provider.yaml` 里另行开启。
+  sandbox.max_per_orb:
+    default: '`2`'
+    constraint: 至少为 1
+  sandbox.max_total:
+    default: '`8`'
+    constraint: 不小于 `max_per_orb`
+    doc: 全局同时在用（创建中与就绪）的沙箱上限。
+  sandbox.idle:
+    default: '`30m`'
+    constraint: '`5m`–`4h`'
+  sandbox.max_lifetime:
+    default: '`12h`'
+    constraint: 不小于 `idle`，不超过 `72h`
+    doc: 沙箱最长寿命的硬上限，绝对 TTL 与续期都不能越过它。
+  sandbox.default_backend:
+    default: '`kvm`'
+    constraint: '`kvm` 或 `docker`'
+
+provider:
+  url:
+    default: （必填）
+    constraint: 须是绝对 URL
+    doc: Provider 连接控制面的地址。与控制面同机时直连本地端口（如 `http://127.0.0.1:7600`）；在另一台主机时写主域名（如 `https://oryn.example.com`）。
+  token_file:
+    default: （必填）
+    constraint: 不能为空
+    doc: Provider 令牌文件的路径，内容是 `oryn provider create <名称>` 的输出，权限设为 `0600`。
+  orb_url:
+    default: 同 `url`
+    doc: 注入环境的 `ORYN_URL`，环境里的 `orbd` 用它连回控制面。同机 Docker 部署写 docker0 网桥地址加 orynd 对应的 `listen` 端口（如 `http://172.17.0.1:7600`）；开启 `orb_tls` 后写 TLS 监听地址（如 `https://172.17.0.1:7643`）；Provider 在另一台主机时写主域名。
+  driver:
+    default: '`docker`'
+    constraint: 取 `docker`、`dispatch`、`firecracker` 之一；`runner` 会被拒绝
+    doc: 创建环境的驱动。Runner 不经 Provider 进程，在那台机器上以 `orbd run --runner` 接入。
+  docker.image:
+    default: '`oryn-orb:dev`'
+    doc: 环境使用的镜像，在同一版本的源码里用 `make image` 构建。Agent 沙箱固定使用它（不用项目快照）。`dispatch` 驱动在任务未指定镜像时把它作为 `ORB_IMAGE` 传给脚本。
+  docker.extra_run_args:
+    default: '`[]`'
+    doc: 追加到 `docker run` 的参数，例如 `["--network", "oryn-orbs"]` 把环境接入专用网桥，`["--dns", "1.1.1.1"]` 指定公网解析器。参数里自带 `seccomp` 选项时不再追加内置的 seccomp 配置。Agent 沙箱容器不追加这些参数。
+  docker.types:
+    default: '`small` / `medium` / `large`'
+    doc: 环境规格表，键是类型名称。不写时取默认三档：`small`（2 CPU、`4g`）、`medium`（4 CPU、`8g`）、`large`（8 CPU、`16g`）；写了就整表替换默认值，不与默认合并。`dispatch` 驱动同样用这张表声明类型。
+  docker.types.<名称>.cpus:
+    default: —
+    doc: 该类型的 CPU 数，传给 `docker run --cpus`，可以是小数。默认规格：`small` 为 2，`medium` 为 4，`large` 为 8。
+  docker.types.<名称>.memory:
+    default: —
+    doc: 该类型的内存上限，传给 `docker run --memory`（如 `4g`）。默认规格：`small` 为 `4g`，`medium` 为 `8g`，`large` 为 `16g`。
+  docker.types.<名称>.runtime:
+    default: 空
+    constraint: 空或 `sysbox-runc`；Provider 启动时预检，`docker info` 里没有该 runtime 就拒绝启动
+  docker.types.<名称>.nested_docker:
+    default: '`false`'
+    constraint: 要求 `runtime` 为 `sysbox-runc`；不支持特权模式
+  docker.default_type:
+    default: '`medium`'
+    constraint: '`driver: docker` 时须是 `types` 里的名称'
+    doc: 未指定类型时使用的规格名称。
+  docker.pids_limit:
+    default: '`4096`'
+    constraint: 不能为负（`0` = 不限）
+  docker.sandbox.enabled:
+    default: '`false`'
+    doc: '是否让这个 Docker Provider 提供 Agent 沙箱（`backend: docker`）。为 `false` 时 `network`、`dns`、`socket_dir` 不校验。开启前要重建镜像（`make image`）。'
+  docker.sandbox.network:
+    default: 空
+    constraint: '`enabled` 时必填；Provider 预检与启动时要求 `docker network inspect <network>` 成功'
+  docker.sandbox.dns:
+    default: '`[]`'
+    constraint: 每项须是 IP
+  docker.sandbox.socket_dir:
+    default: '`/run/oryn-sbx`'
+    constraint: 须是绝对路径
+    doc: 存放各沙箱 link 中继 socket 的目录（`<socket_dir>/<orbId>/link.sock`）。Provider 预检与启动时建出它（`0700`）。
+  dispatch.script:
+    default: 空
+    constraint: '`driver: dispatch` 时必填'
+    doc: dispatch 驱动执行的脚本。每个任务执行一次（无参数），输入经环境变量传递，退出码 0 = 成功；脚本在独立进程组中运行，任务超时（5 分钟）时整组被终止。
+  firecracker.bin:
+    default: '`/usr/local/bin/firecracker`'
+    constraint: '`driver: firecracker` 时须是非空的绝对路径'
+  firecracker.jailer:
+    default: '`/usr/local/bin/jailer`'
+    constraint: '`driver: firecracker` 时须是非空的绝对路径'
+    doc: jailer 可执行文件。
+  firecracker.kernel:
+    default: '`/var/lib/oryn-fc/artifacts/vmlinux`'
+    constraint: '`driver: firecracker` 时须是非空的绝对路径'
+  firecracker.rootfs:
+    default: '`/var/lib/oryn-fc/artifacts/rootfs.ext4`'
+    constraint: '`driver: firecracker` 时须是非空的绝对路径'
+    doc: 只读根盘（ext4），须与 `state_dir` 在同一文件系统。更新时用 `install` 换成新文件，不能原地覆盖：运行中 VM 的基础盘是它的硬链接。
+  firecracker.state_dir:
+    default: '`/var/lib/oryn-fc`'
+    constraint: '`driver: firecracker` 时须是非空的绝对路径'
+  firecracker.disk_gb:
+    default: '`40`'
+    constraint: 至少为 8
+  firecracker.uid_base:
+    default: '`2000000000`'
+    constraint: 1 至 2147467327；预检要求区间 `[uid_base, uid_base+16320)` 不与 `/etc/subuid`、`/etc/subgid` 的任何一段及已有用户 / 组重叠
+  firecracker.network.cidr:
+    default: '`172.31.0.0/16`'
+    constraint: 须是 IPv4 /16 网段
+    doc: guest 网络的网段。每台 VM 一个 /30（槽位 n：宿主侧 = 基址 + 4n + 1，guest = 基址 + 4n + 2），网段的最后一个 /24 留给 `host_addr`。
+  firecracker.network.host_addr:
+    default: '`172.31.255.1`'
+    constraint: 须是网段最后一个 /24 内的 IPv4 地址
+    doc: 宿主上 dummy 接口 `oryn-fc` 的地址，orynd 在它上面给 guest 提供 link。缺省值与 `deploy/firecracker/oryn-fc-net.sh` 建立的地址相同。
+  firecracker.network.dns:
+    default: '`["1.1.1.1", "1.0.0.1"]`'
+    constraint: 至少一个，每项须是 IP
+    doc: 下发给 guest 的 DNS 服务器。
+  firecracker.limits.max_vms:
+    default: '`8`'
+    constraint: 1 至 16320
+    doc: VM 数上限，启动 VM 前核对，超出时创建失败，原因 `capacity`。运行或冻结中的 box 与 Agent 沙箱的 VM 也占名额。
+  firecracker.limits.max_memory_mb:
+    default: '`32768`'
+    constraint: 至少为 1
+    doc: 全部 VM 的内存合计上限（MiB），冻结的 VM 也算在内；超出时创建失败，原因 `capacity`。
+  firecracker.types:
+    default: '`small` / `medium` / `large`'
+    doc: microVM 规格表，键是类型名称。不写时取默认三档（与 Docker 驱动的默认规格同名同量）；写了就整表替换默认值，不与默认合并。
+  firecracker.types.<名称>.cpus:
+    default: —
+    constraint: 至少为 1，只能是整数
+    doc: 该类型的 vCPU 数，写小数会报错。默认规格：`small` 为 2，`medium` 为 4，`large` 为 8。
+  firecracker.types.<名称>.memory:
+    default: —
+    constraint: 须为正整数并带单位 `m`、`g` 或 `t`（不区分大小写），如 `4g`、`512m`
+    doc: 该类型的内存。默认规格：`small` 为 `4g`，`medium` 为 `8g`，`large` 为 `16g`。
+  firecracker.default_type:
+    default: '`medium`'
+    constraint: '`driver: firecracker` 时须是 `types` 里的名称'
+    doc: 未指定类型时使用的规格名称。
+  firecracker.sandbox.enabled:
+    default: '`false`'
+    doc: '是否让这个 Firecracker Provider 提供 Agent 沙箱（`backend: kvm`）。沙箱的 link 走 vsock，不需要额外的网络配置；开启前要重装含新 `orbd` 的根盘。'
+
+pushGateway:
+  listen:
+    default: '`127.0.0.1:7700`'
+    constraint: 不能为空
+    doc: 网关的监听地址。只监听回环、由本机反代终止 TLS：网关只在请求来自回环地址时采信 `X-Real-IP` / `X-Forwarded-For`。
+  public_origin:
+    default: （必填）
+    constraint: 须是 `scheme://host[:port]`：`https`，或回环主机的 `http`；不带路径、查询与用户信息，结尾的 `/` 会被去掉
+  data_dir:
+    default: '`/var/lib/oryn-push-gateway`'
+    constraint: 不能为空
+    doc: 数据目录，存放 `master.key`（32 字节主密钥，首次启动生成）与 `gateway.db`（授权表）。备份时两者缺一不可。
+  log_level:
+    default: '`info`'
+    constraint: 取 `debug`、`info`、`warn`、`error` 之一
+    doc: 网关的日志级别。
+  apns.key_file:
+    default: 空
+    doc: Apple Developer 下载的 APNs 密钥文件 `AuthKey_<Key ID>.p8`。空 = 不提供 APNs。
+  apns.key_id:
+    default: 空
+    constraint: 设置了 `key_file` 时必填
+    doc: APNs 密钥的 Key ID（密钥文件名里那串，也显示在密钥详情页）。
+  apns.team_id:
+    default: 空
+    constraint: 设置了 `key_file` 时必填
+    doc: Apple Developer 团队的 Team ID（Membership details 页可查）。
+  apns.topic:
+    default: 空
+    constraint: 设置了 `key_file` 时必填
+  apns.environments:
+    default: 空（两者都接受）
+    constraint: 每项为 `production` 或 `sandbox`，不得重复
+  fcm.service_account_file:
+    default: 空
+    doc: Firebase 服务账号 JSON 文件（Firebase 控制台 → 项目设置 → 服务账号 → 生成新的私钥）。空 = 不提供 FCM。
+  fcm.app_id:
+    default: 空
+    constraint: 设置了 `service_account_file` 时必填
+  limits.grant_per_minute:
+    default: '`60`'
+    constraint: 正整数
+    doc: 每个授权每分钟可推送的次数。
+  limits.grant_per_day:
+    default: '`2000`'
+    constraint: 正整数
+    doc: 每个授权每天可推送的次数。
+  limits.host_per_minute:
+    default: '`600`'
+    constraint: 正整数
+    doc: 每个主机公钥（每台 orynd）每分钟可推送的次数。
+  limits.challenges_per_ip_hour:
+    default: '`30`'
+    constraint: 正整数
+    doc: 每个来源 IP 每小时可发起的 `POST /v1/challenges` 次数。

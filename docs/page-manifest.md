@@ -8,45 +8,42 @@
 |---|---|---|---|---|---|---|
 | 1 | `what-is-oryn` | 认识 Oryn | E | R 首屏至「工作台」之前、R「架构与安全」、F「执行环境」首段 | 本页回答「Oryn 是什么、由哪几部分组成」；一句话定位；线程 → 环境 → 控制面 → 客户端的关系图（改写 README 的 mermaid，组件名用本站术语）；组件表（`orynd` / `orbd` / `oryn` / Web 与壳）；单所有者、自托管；当前为预发布版本 | `readme/hero` |
 | 2 | `concepts` | 核心概念 | E | F 全文各节首段；R「执行环境」「Boxes」「全局助手与 Space」 | 本页回答「读后面的文档前要认识哪些词」；项目、线程、环境、Provider、Runner、快照与预热池、全局助手、主线、Space、Artifact、视图、Portal、Boxes、Agent 沙箱，各 2–3 句并链到对应指南；一张关系图 | — |
-| 3 | `quickstart` | 快速开始：在本机跑起来 | T | R「快速开始」；D「1. 安装二进制与镜像」（镜像体积、git 版本） | 唯一路径：源码构建 + Docker Provider + `localhost`；前置依赖与版本照抄；四步命令照抄 README；每步写出 README 里给出的可见结果（`orb 镜像离线冒烟：通过`、日志里的 `setup#token=` 链接、注册 Passkey 与保存恢复码、线程在 Docker 环境里启动）；结尾链到「第一个线程」与「部署总览」 | `ui/setup` |
-| 4 | `first-thread` | 第一个线程 | T | F「项目」「转录与工具卡」「工程面板」；i18n:`newThread` `projects` `changes` | 唯一路径：用一个公开的 `https://` 仓库新建项目 → 首屏输入框发第一条消息 → 看工具卡 → 右面板「改动」看 diff → 归档线程；每步写界面上出现什么。写之前在 `cd $ORYN_REPO/web && bun run dev:mock` 里走一遍，按钮文案以界面为准 | `ui/home` `ui/thread-top` `ui/panel-changes` |
-| 5 | `tour` | 界面导览 | E | `web/src/components/layout/Sidebar.tsx`、`web/src/lib/sections.ts`、`web/src/App.tsx`、`web/src/state/ui.ts`（`PanelTab`）、`web/src/components/layout/more-entries.ts`；R「工作台」 | 本页回答「每个区域是干什么的、在哪里找东西」；侧栏四个分区（线程 / 全局助手 / 项目 / 更多）与「更多」里的五个入口；线程页三栏；右面板七个页签及各自出现的条件；命令面板；设置入口；窄屏布局的差别 | `readme/workbench` `ui/sink-open` |
+| 3 | `quickstart` | 快速开始：在本机跑起来 | T | R「快速开始」；D「1. 安装二进制与镜像」（镜像体积、git 版本） | 唯一路径：源码构建 + Docker Provider + `localhost`；前置依赖与版本照抄；四步命令照抄 README；每步写出 README 里给出的可见结果（`orb 镜像离线冒烟：通过`、日志里的 `setup#token=` 链接、注册 Passkey 与保存恢复码、线程在 Docker 环境里启动）；结尾链到「第一个线程」与「部署总览」 | — |
+| 4 | `first-thread` | 第一个线程 | T | F「项目」「转录与工具卡」「工程面板」；i18n:`newThread` `projects` `changes` | 唯一路径：用一个公开的 `https://` 仓库新建项目 → 首屏输入框发第一条消息 → 看工具卡 → 右面板「改动」看 diff → 归档线程；每步写界面上出现什么。写之前在 `cd $ORYN_REPO/web && bun run dev:mock` 里走一遍，按钮文案以界面为准 | — |
+| 5 | `tour` | 界面导览 | E | `web/src/components/layout/Sidebar.tsx`、`web/src/lib/sections.ts`、`web/src/App.tsx`、`web/src/state/ui.ts`（`PanelTab`）、`web/src/components/layout/more-entries.ts`；R「工作台」 | 本页回答「每个区域是干什么的、在哪里找东西」；侧栏四个分区（线程 / 全局助手 / 项目 / 更多）与「更多」里的五个入口；线程页三栏；右面板七个页签及各自出现的条件；命令面板；设置入口；窄屏布局的差别 | `readme/workbench` |
 
 ### 使用 · 线程与对话 `guide/threads/`
 
 | # | 路径 | 标题 | 类型 | 来源 | 必须覆盖 | 截图 |
 |---|---|---|---|---|---|---|
-| 1 | `new-thread` | 新建线程与选择执行位置 | H | F「首屏直达」「orb 跟随线程」「四种执行后端」；help:`thread`；i18n:`newThread` `roleCapsule` | 首屏输入框；角色胶囊（角色 / 指定模型与思考档位 / 全局助手）；项目胶囊；执行位置三类（Provider 与类型、Runner 目录与 worktree、box）；「新对话默认对象」存服务端；`oryn thread new` 的对应参数与互斥关系 | `ui/home` `ui/m11a-executor` `ui/m11b-executor` |
-| 2 | `transcript` | 读懂转录与工具卡 | E | F「转录与工具卡」；R「工作台」下的工具卡段 | 本页回答「对话里每种元素表示什么」；工具卡头部意图与读数；展开体；bash 的 Pseudo 视图（Runner 线程的差别）；思考块；后台任务标记与事件行；思考档位图标与生效优先级；表格复制为 CSV / Markdown / PNG | `site/tool-cards` `site/tool-diff` `ui/tools-expanded` |
-| 3 | `composer` | 输入框：发送、引导与排队 | H | F「输入框」；`web/src/lib/composer.ts`；`web/src/lib/shortcuts.ts`；`web/src/components/composer/RefMenu.tsx` | 两种发送键模式；回合进行中的引导 / 排队 / 中断并发送；前缀 `!` `!!` `$` `$$` `?` `->` `=>` 与单独的 `.`；`#` 引用 issue / PR；附件；下一条消息预测（开关位置、计费提示）；提示缓存读数 | `ui/thread-slash` `ui/dialog-attachments` |
-| 4 | `rewind-fork` | 回退、分叉与会话树 | H | F「输入框」里的回退；F「orb 跟随线程」（共用环境的分叉）；help:`thread`（`fork`）；`web/src/lib/slash.ts`（`/tree` `/fork` `/branch` `/rewind`） | 连按两次 <kbd>Esc</kbd> 在空闲与进行中的不同含义；回退后原路径保留为分支与「撤销」；`/tree`；分叉的两种环境方式（`share` / `copy`） | `ui/dialog-tree` |
-| 5 | `selection-actions` | 选区动作与右键菜单 | H | F「右键菜单与选区动作」 | 选中文字后的动作；解释卡与旁路提问；自定义动作在哪里管理及其上限（12 条、名称 24 字、提示词 2000 字）；哪些位置有右键菜单、键盘与触屏的触发方式 | `site/explain-card` `ui/thread-menu` |
-| 6 | `inbox` | 收件箱：处理等你的事 | H | F「收件箱与命令面板」；i18n:`inbox` `uiRequest` `plan` | 侧栏「需要你」；`/inbox` 的分节顺序与筛选；行内一触作答；出错归类；线程里的提问卡与计划审批 | `site/inbox` `ui/thread-ask` `ui/thread-plan` |
+| 1 | `new-thread` | 新建线程与选择执行位置 | H | F「首屏直达」「orb 跟随线程」「四种执行后端」；help:`thread`；i18n:`newThread` `roleCapsule` | 首屏输入框；角色胶囊（角色 / 指定模型与思考档位 / 全局助手）；项目胶囊；执行位置三类（Provider 与类型、Runner 目录与 worktree、box）；「新对话默认对象」存服务端；`oryn thread new` 的对应参数与互斥关系 | — |
+| 2 | `transcript` | 读懂转录与工具卡 | E | F「转录与工具卡」；R「工作台」下的工具卡段 | 本页回答「对话里每种元素表示什么」；工具卡头部意图与读数；展开体；bash 的 Pseudo 视图（Runner 线程的差别）；思考块；后台任务标记与事件行；思考档位图标与生效优先级；表格复制为 CSV / Markdown / PNG | `site/tool-cards` `site/tool-diff` |
+| 3 | `composer` | 输入框：发送、引导与排队 | H | F「输入框」；`web/src/lib/composer.ts`；`web/src/lib/shortcuts.ts`；`web/src/components/composer/RefMenu.tsx` | 两种发送键模式；回合进行中的引导 / 排队 / 中断并发送；前缀 `!` `!!` `$` `$$` `?` `->` `=>` 与单独的 `.`；`#` 引用 issue / PR；附件；下一条消息预测（开关位置、计费提示）；提示缓存读数 | — |
+| 4 | `rewind-fork` | 回退、分叉与会话树 | H | F「输入框」里的回退；F「orb 跟随线程」（共用环境的分叉）；help:`thread`（`fork`）；`web/src/lib/slash.ts`（`/tree` `/fork` `/branch` `/rewind`） | 连按两次 <kbd>Esc</kbd> 在空闲与进行中的不同含义；回退后原路径保留为分支与「撤销」；`/tree`；分叉的两种环境方式（`share` / `copy`） | — |
+| 5 | `selection-actions` | 选区动作与右键菜单 | H | F「右键菜单与选区动作」 | 选中文字后的动作；解释卡与旁路提问；自定义动作在哪里管理及其上限（12 条、名称 24 字、提示词 2000 字）；哪些位置有右键菜单、键盘与触屏的触发方式 | `site/explain-card` |
+| 6 | `inbox` | 收件箱：处理等你的事 | H | F「收件箱与命令面板」；i18n:`inbox` `uiRequest` `plan` | 侧栏「需要你」；`/inbox` 的分节顺序与筛选；行内一触作答；出错归类；线程里的提问卡与计划审批 | `site/inbox` |
 | 7 | `search` | 命令面板与全文搜索 | H | F「收件箱与命令面板」；P「对话内容搜索」 | <kbd>Ctrl/⌘</kbd>+<kbd>K</kbd>；能跳到哪些对象；对话正文全文搜索（中文无需分词、分叉复制的消息只计一次） | `site/palette` |
-| 8 | `sharing` | 公开分享线程 | H | P「M5：公开分享、通知与 sync」下「REST（已鉴权）」「匿名面」「限额」；i18n:`share`；F「视图」里的公开分享、F「头像」末段 | 创建与撤销分享；分享前的密钥扫描提示；分享页能看到什么、不能做什么；限额 | `ui/share-dialog` `ui/share-dialog-findings` `ui/share-page` |
-
+| 8 | `sharing` | 公开分享线程 | H | P「M5：公开分享、通知与 sync」下「REST（已鉴权）」「匿名面」「限额」；i18n:`share`；F「视图」里的公开分享、F「头像」末段 | 创建与撤销分享；分享前的密钥扫描提示；分享页能看到什么、不能做什么；限额 | — |
 ### 使用 · 工程面板 `guide/workbench/`
 
 | # | 路径 | 标题 | 类型 | 来源 | 必须覆盖 | 截图 |
 |---|---|---|---|---|---|---|
-| 1 | `info-panel` | 信息面板 | H | F「工程面板」；R「工作台」首段 | 环境卡（状态、资源、唤醒）；入口行（服务、环境、浏览器 Profile、能力、SSH 主机）；待办；子 Agent 派发树；后台任务详情与停止；沙箱区块 | `site/info-panel` `site/orb-card` `ui/panel-info` |
-| 2 | `changes` | 查看改动、提交与开 PR | H | F「工程面板」；F「托管仓库」里的交付；F「GitHub」；R「工作台」解释卡之后一段 | 改动范围切换；暂存与取消暂存；推送并开 PR；托管项目的「提交并推送到基线」；线程页头的 PR 与 CI 状态；合并即「已交付」 | `site/changes-diff` `ui/panel-changes` `site/thread-header-pr` |
-| 3 | `files` | 文件面板与预览 | H | F「文件预览」；F「冻结、唤醒与停机」里的停机只读 | 支持预览的格式表（照抄）；预览 / 源码切换；HTML 的沙箱帧；环境停机时只读浏览、不唤醒 | `readme/file-preview` `ui/panel-files` |
-| 4 | `terminal` | 终端 | H | F「工程面板」的终端行；i18n:`terminal` | 打开终端；断线后的快照续传（256K 字符）；提醒点（终端等输入） | `ui/panel-terminal` |
-| 5 | `portal-services` | 受管服务与 Portal 预览 | H | F「工程面板」的 Portal 行；D「Portal（受管服务的浏览器入口）」；`internal/orbdrt/servicefile.go`；help:`orb` | 在 `.oryn/services.yaml` 声明服务（字段链到参考页）；`oryn orb service` 的用法；Portal 地址形式；访问控制与限时公开预览；服务故障时的重启 | `ui/portal-panel` `ui/portal-access-public` `ui/portal-services` |
-| 6 | `desktop` | 远程桌面与人机接管 | H | F「远程桌面与人机控制」；R「工作台」下远程桌面两段 | 四种控制状态；接管与交还；Agent 请你操作时在哪里作答；任务栏里的应用；录屏的规格与上限；已知限制 | `site/desktop-takeover` `ui/desktop-in-use` `ui/desktop-dock-thread` `ui/desktop-record-thread` |
-| 7 | `browser-profiles` | 浏览器 Profile：复用登录态 | H | P「M8：Desktop 与浏览器 Profile」；F「工程面板」的桌面行；help:`thread`（`--browser-profile` `--readonly` `--takeover`）；i18n:`browserProfiles` | Profile 是什么；在设置与项目设置里选用；占用冲突时的只读与接管 | `ui/desktop-conflict` `ui/desktop-readonly` |
-
+| 1 | `info-panel` | 信息面板 | H | F「工程面板」；R「工作台」首段 | 环境卡（状态、资源、唤醒）；入口行（服务、环境、浏览器 Profile、能力、SSH 主机）；待办；子 Agent 派发树；后台任务详情与停止；沙箱区块 | `site/info-panel` `site/orb-card` |
+| 2 | `changes` | 查看改动、提交与开 PR | H | F「工程面板」；F「托管仓库」里的交付；F「GitHub」；R「工作台」解释卡之后一段 | 改动范围切换；暂存与取消暂存；推送并开 PR；托管项目的「提交并推送到基线」；线程页头的 PR 与 CI 状态；合并即「已交付」 | `site/changes-diff` `site/thread-header-pr` |
+| 3 | `files` | 文件面板与预览 | H | F「文件预览」；F「冻结、唤醒与停机」里的停机只读 | 支持预览的格式表（照抄）；预览 / 源码切换；HTML 的沙箱帧；环境停机时只读浏览、不唤醒 | `readme/file-preview` |
+| 4 | `terminal` | 终端 | H | F「工程面板」的终端行；i18n:`terminal` | 打开终端；断线后的快照续传（256K 字符）；提醒点（终端等输入） | — |
+| 5 | `portal-services` | 受管服务与 Portal 预览 | H | F「工程面板」的 Portal 行；D「Portal（受管服务的浏览器入口）」；`internal/orbdrt/servicefile.go`；help:`orb` | 在 `.oryn/services.yaml` 声明服务（字段链到参考页）；`oryn orb service` 的用法；Portal 地址形式；访问控制与限时公开预览；服务故障时的重启 | — |
+| 6 | `desktop` | 远程桌面与人机接管 | H | F「远程桌面与人机控制」；R「工作台」下远程桌面两段 | 四种控制状态；接管与交还；Agent 请你操作时在哪里作答；任务栏里的应用；录屏的规格与上限；已知限制 | `site/desktop-takeover` |
+| 7 | `browser-profiles` | 浏览器 Profile：复用登录态 | H | P「M8：Desktop 与浏览器 Profile」；F「工程面板」的桌面行；help:`thread`（`--browser-profile` `--readonly` `--takeover`）；i18n:`browserProfiles` | Profile 是什么；在设置与项目设置里选用；占用冲突时的只读与接管 | — |
 ### 使用 · 项目 `guide/projects/`
 
 | # | 路径 | 标题 | 类型 | 来源 | 必须覆盖 | 截图 |
 |---|---|---|---|---|---|---|
-| 1 | `manage` | 创建与管理项目 | H | F「项目」（到「仓库浏览」之前） | 三种仓库类型；项目总览与主页的各区块；线程子页的筛选；设置七个分组各管什么；归档与删除各自的后果 | `site/projects-overview` `site/project-home` `ui/projects-threads` `ui/projects-settings` |
-| 2 | `repo-browser` | 仓库浏览 | H | F「仓库浏览」 | 镜像何时同步、手动同步；用哪份凭据；提交关联线程的三种来源；「不可用」说明表照抄；Git LFS 的行为与上限 | `ui/projects-repo-home` `ui/projects-repo-commit` `ui/projects-repo-file` |
-| 3 | `hosted-repo` | 托管仓库 | H | F「托管仓库」；help:`clone` `project` | 新建托管仓库；`oryn clone`；把本机仓库建成托管项目；交付流程；推送后 Webhook（请求头、载荷、验签示例照抄）；基线分支被强推后的找回；归档与删除；LFS 与容量 | `ui/projects-hosted-home` `ui/projects-new-hosted` |
-| 4 | `environment` | 环境配置：setup、resume、快照与预热 | H | F「环境自配置」「项目快照与预热池」；`internal/orbdrt/setup.go`（超时常量、`setupInputFiles`）；help:`orb`（`setup`） | 两个脚本各在何时运行、超时、失败后的表现与修复入口；项目设置里的脚本与仓库脚本的先后；快照何时生成与失效；预热池（1–3 台）；Git LFS | `ui/m11a-project-accel` `ui/m11a-panel-snapshot` |
-| 5 | `secrets` | 密钥与环境变量 | H | F「项目级密钥与环境变量」「出站代理凭据隔离」；help:`secrets` | 全局与项目两层；命名规则；保密与不保密；优先级；`.env` 批量导入；谁拿不到；何时生效；CLI | `ui/project-secrets` `ui/project-secrets-bulk` |
-
+| 1 | `manage` | 创建与管理项目 | H | F「项目」（到「仓库浏览」之前） | 三种仓库类型；项目总览与主页的各区块；线程子页的筛选；设置七个分组各管什么；归档与删除各自的后果 | `site/projects-overview` `site/project-home` |
+| 2 | `repo-browser` | 仓库浏览 | H | F「仓库浏览」 | 镜像何时同步、手动同步；用哪份凭据；提交关联线程的三种来源；「不可用」说明表照抄；Git LFS 的行为与上限 | — |
+| 3 | `hosted-repo` | 托管仓库 | H | F「托管仓库」；help:`clone` `project` | 新建托管仓库；`oryn clone`；把本机仓库建成托管项目；交付流程；推送后 Webhook（请求头、载荷、验签示例照抄）；基线分支被强推后的找回；归档与删除；LFS 与容量 | — |
+| 4 | `environment` | 环境配置：setup、resume、快照与预热 | H | F「环境自配置」「项目快照与预热池」；`internal/orbdrt/setup.go`（超时常量、`setupInputFiles`）；help:`orb`（`setup`） | 两个脚本各在何时运行、超时、失败后的表现与修复入口；项目设置里的脚本与仓库脚本的先后；快照何时生成与失效；预热池（1–3 台）；Git LFS | — |
+| 5 | `secrets` | 密钥与环境变量 | H | F「项目级密钥与环境变量」「出站代理凭据隔离」；help:`secrets` | 全局与项目两层；命名规则；保密与不保密；优先级；`.env` 批量导入；谁拿不到；何时生效；CLI | — |
 ### 使用 · 执行环境 `guide/environments/`
 
 | # | 路径 | 标题 | 类型 | 来源 | 必须覆盖 | 截图 |
@@ -54,7 +51,7 @@
 | 1 | `lifecycle` | 环境如何随线程生灭 | E | F「orb 跟随线程」「冻结、唤醒与停机」；D「行为差异」（位于「12. Firecracker provider（M11b）」下） | 本页回答「环境什么时候创建、冻结、停机、删除」；状态图；归档与删除线程分别导致什么；定时任务的旧运行如何回收 | — |
 | 2 | `backends` | 选择执行后端 | E | F「四种执行后端」；R「执行环境」 | 本页回答「四种后端差在哪、各适合什么」；对比表照抄；各自需要管理员先做什么（链到部署页） | — |
 | 3 | `dev-image` | 开发镜像里有什么 | Rf | F「开发镜像」 | 基础系统与架构；预装工具表照抄；怎样在 setup 里加装系统包；BlackArch 源；镜像内的清单文件路径 | — |
-| 4 | `runner` | 在自己的机器上跑线程（Runner） | H | D「11. Runner：在自己的机器上跑线程（M11b）」全部小节；F「四种执行后端」里的 worktree；`cmd/orbd/main.go`（flag 与校验） | 先读的安全边界；支持的平台；`oryn runner create` 与启动命令；systemd 用户单元；在 Runner 上开线程、worktree、共用目录；Runner 线程没有哪些能力 | `ui/m11b-executor` `ui/m11b-thread` `ui/m11b-settings` |
+| 4 | `runner` | 在自己的机器上跑线程（Runner） | H | D「11. Runner：在自己的机器上跑线程（M11b）」全部小节；F「四种执行后端」里的 worktree；`cmd/orbd/main.go`（flag 与校验） | 先读的安全边界；支持的平台；`oryn runner create` 与启动命令；systemd 用户单元；在 Runner 上开线程、worktree、共用目录；Runner 线程没有哪些能力 | — |
 | 5 | `sandboxes` | Agent 沙箱 | H | F「Agent 沙箱」；help:`sandbox` | `<Requires ids={['sandbox']} />`；用途；两种后端与两种网络；运行命令与后台作业的上限；传文件；回收与级联规则；配额；谁能用；你在哪里查看与销毁；零凭据 | `site/sandbox` |
 | 6 | `browser-relay` | 让 Agent 使用你本机的 Chrome | H | F「本机浏览器中继（Chrome 扩展）」；P「M27：客户端浏览器中继（Browser Relay）」 | 用途；安装扩展并切到云端模式；配对与绑定到线程；与环境内桌面浏览器的分工；审批队列的三个选项；在哪里吊销 | — |
 
@@ -92,9 +89,8 @@
 | 4 | `github` | GitHub：仓库绑定、PR 与回流 | H | F「GitHub」；D「仓库绑定与 orb 内凭据」「身份规则」「事件来源与额度」「审计」 | `<Requires ids={['github-oauth']} />`；连接「我的账号」与「Agent 账号」；环境里 `git` 与 `gh` 免登录；自动绑定；哪些事件回流、怎样显示；审计 | — |
 | 5 | `github-automation` | GitHub 自动化：触发规则、门禁与发布哨兵 | H | F「GitHub」；D「门禁」「发布哨兵」「issue 任务」「CLI」「风险说明」；help:`github` | 三个预设；触发者档位与所用账号；推送 / 开 PR 门禁；发布哨兵（至多 5 轮）；issue 任务；`oryn github` 子命令 | — |
 | 6 | `ssh-hosts` | SSH 主机 | H | F「SSH 主机」；D「15. SSH 主机与控制面网关（M18）」；help:`ssh` | 生成或导入钥匙；登记主机（全局 / 项目）、跳板；环境里的三种用法；全自动线程的放行；测试、状态快照、网页终端；审计与指纹重置 | `site/ssh` |
-| 7 | `stats` | 成本统计与预算 | H | F「成本与产出统计」；D「9. 统计分析（M10）」；help:`stats`；i18n:`stats` | 统计页三个页签；可下钻的维度；预算与告警；CSV；CLI | `site/stats` `ui/stats-usage` `ui/stats-budget` |
-| 8 | `notifications` | 通知渠道 | H | P「M5：公开分享、通知与 sync」下「通知与投递」；i18n:`notifySettings` `notify`；M「在通知上作答」 | 支持的渠道（Web Push、Telegram、Webhook、ntfy、Bark、手机推送）；各在哪里配置；何时会通知；在通知上直接作答 | `ui/notify-bell` |
-
+| 7 | `stats` | 成本统计与预算 | H | F「成本与产出统计」；D「9. 统计分析（M10）」；help:`stats`；i18n:`stats` | 统计页三个页签；可下钻的维度；预算与告警；CSV；CLI | `site/stats` |
+| 8 | `notifications` | 通知渠道 | H | P「M5：公开分享、通知与 sync」下「通知与投递」；i18n:`notifySettings` `notify`；M「在通知上作答」 | 支持的渠道（Web Push、Telegram、Webhook、ntfy、Bark、手机推送）；各在哪里配置；何时会通知；在通知上直接作答 | — |
 ### 使用 · Artifacts 与视图 `guide/artifacts/`
 
 | # | 路径 | 标题 | 类型 | 来源 | 必须覆盖 | 截图 |
@@ -103,7 +99,7 @@
 | 2 | `office` | Word、Excel、PowerPoint 与 PDF | H | F「Artifacts」的 Office 文件与 Office 引擎 | 七种类型与大小上限；预览、评论、上传新版本、下载；「转为 artifact」；在线编辑需要 `<Requires ids={['office-engine']} />` 及编辑期间的锁 | — |
 | 3 | `design-canvas` | 设计画布与多版方案 | H | F「Artifacts」的画布编辑器、设计画布、品质与迭代、多版方案、原型与交付；help:`design` | 画布编辑器；设计画布的实时 / 静态切换及其前提；品质检查（14 条规则）；方案组（2–4 版）与「选定此方案」；设备外壳与导出；部署到 box | `site/artifact-variants` |
 | 4 | `publishing` | 发布 Artifact 与页面能力 | H | F「Artifacts」的页面能力与发布；i18n:`publish` | 私有、访问码、公开链接；发布前的密钥扫描；`oryn.use(…)` 的三种能力（`db`、`files`、`sample`）与首次同意、在哪里收回 | — |
-| 5 | `views` | 视图：对话里的交互界面 | E | F「视图」 | 本页回答「视图是什么、你的操作去了哪里」；两种形态；回传的两种方式（下一条消息 / 等待作答，10 分钟）；用过即锁；谁能用；开关；分享页里的行为；自建 Anthropic 兼容网关时逐块显示的配置 | `site/view-0` `site/view-1` `site/view-2` |
+| 5 | `views` | 视图：对话里的交互界面 | E | F「视图」 | 本页回答「视图是什么、你的操作去了哪里」；两种形态；回传的两种方式（下一条消息 / 等待作答，10 分钟）；用过即锁；谁能用；开关；分享页里的行为；自建 Anthropic 兼容网关时逐块显示的配置 | `site/view-form` `site/view-form-answered` `site/view-dashboard` `site/view-actions` |
 
 ### 使用 · Boxes `guide/boxes/`
 
@@ -118,8 +114,8 @@
 
 | # | 路径 | 标题 | 类型 | 来源 | 必须覆盖 | 截图 |
 |---|---|---|---|---|---|---|
-| 1 | `web` | 浏览器：登录、设备与外观 | H | D「4. 启动控制面并初始化」；R「全平台客户端」；`web/src/pages/settings/registry.ts`（`account` `appearance`）；i18n:`auth` `devices` `appearance` `pair` | Passkey 登录与恢复码；批准设备配对、吊销设备；主题、主题色、壁纸、语言（简体中文 / English） | `ui/login` `ui/pair` |
-| 2 | `desktop` | 桌面 App | H | K 开头至「自动更新」（不含「窗口与标题栏」「开发」及其后） | 各平台安装包与 Linux 依赖；首次运行与配对；托盘、通知、深链接、全局快捷键；已知限制；自动更新 | `site/desktop-app` `ui/settings-desktop` |
+| 1 | `web` | 浏览器：登录、设备与外观 | H | D「4. 启动控制面并初始化」；R「全平台客户端」；`web/src/pages/settings/registry.ts`（`account` `appearance`）；i18n:`auth` `devices` `appearance` `pair` | Passkey 登录与恢复码；批准设备配对、吊销设备；主题、主题色、壁纸、语言（简体中文 / English） | — |
+| 2 | `desktop` | 桌面 App | H | K 开头至「自动更新」（不含「窗口与标题栏」「开发」及其后） | 各平台安装包与 Linux 依赖；首次运行与配对；托盘、通知、深链接、全局快捷键；已知限制；自动更新 | `site/desktop-app` |
 | 3 | `android` | Android App | H | M 开头至「已知限制」（不含「开发」及其后）；`.github/workflows/release.yml`（产物名） | `foss` 与 `gms` 的区别；下载与用 `apksigner` 校验（指纹照抄）；配对；省电设置；已知限制 | — |
 | 4 | `ios` | iOS App | H | M「已知限制」；F「移动」 | 当前只经 TestFlight 内部测试这一状态；已有的界面与功能；推送经官方网关 | — |
 | 5 | `cli` | 命令行 oryn | H | R「CLI 速查」；F「终端」；`cmd/oryn/client.go`（凭据路径）；help:`login` `thread` `sync` | 从哪里得到二进制；`oryn login`；凭据文件位置与 `ORYN_CREDENTIALS`；`thread attach`；`sync`（含 `--apply` 与还原）；完整命令见参考 | — |
