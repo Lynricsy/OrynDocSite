@@ -98,7 +98,7 @@ Flags:
 ```text
 退出码（--exit-on-idle）：见到一个回合结束后，线程 idle → 0、awaiting_input → 3、error → 4。
 输入：每行一条；有待答请求时作为作答（编号或文字）；有待审批的计划时输入编号或选项名批准，
-"save <绝对路径>" 保存计划，其它文字作为修改意见发回；否则 steer 当前回合。/abort 中断，/quit 退出；
+"save <路径>" 保存计划（相对路径按 agent 工作目录解析），其它文字作为修改意见发回；否则 steer 当前回合。/abort 中断，/quit 退出；
 终端上 EOF 或 Ctrl-C 退出（agent 继续），管道输入结束后继续查看。
 
 Usage:
