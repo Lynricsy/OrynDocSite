@@ -79,7 +79,7 @@ sidebar:
 
 | `ORB_OPERATION` | 含义 |
 |---|---|
-| `spawn` | 创建或唤醒机器（包括从冻结状态停机前的解冻），并让机器内的 `orbd` 用本次令牌连接；每次入队都会轮换令牌 |
+| `spawn` | 创建机器，或让已存在的机器恢复运行（解冻、开机或已在运行），并让机器内的 `orbd` 用本次令牌连接；每次入队都会轮换令牌 |
 | `pause` | 冻结（`ORB_PAUSE_MODE=freeze`）或停机（`ORB_PAUSE_MODE=stop`）机器 |
 | `snapshot` | 把机器存成快照 `ORB_SNAPSHOT_ID` |
 | `delete_snapshot` | 删除快照 `ORB_SNAPSHOT_ID` |

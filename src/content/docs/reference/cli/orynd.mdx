@@ -60,10 +60,10 @@ orynd: flag: help requested
 sudo -u oryn orynd --config /etc/oryn/orynd.yaml setup-token
 ```
 
-重新生成初始化令牌，在 stdout 打印 setup 链接。用于 setup 链接丢失的情况。已完成初始化时报错：
+重新生成初始化令牌，在 stdout 打印 setup 链接。用于 setup 链接丢失的情况。已完成初始化时在 stderr 报错并以 1 退出：
 
 ```text
-已完成初始化；丢失 Passkey 请在 /login 使用恢复码
+orynd: 已完成初始化；丢失 Passkey 请在 /login 使用恢复码
 ```
 
 ## admin
