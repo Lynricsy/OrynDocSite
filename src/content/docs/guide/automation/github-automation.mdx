@@ -1,0 +1,213 @@
+---
+title: GitHub 自动化：触发规则、门禁与发布哨兵
+description: 用触发规则让 GitHub 事件自动开线程，用推送 / 开 PR 门禁约束 Agent 的写操作，用发布哨兵修复被阻塞的发布 CI。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### GitHub'
+  - file: docs/deploy.md
+    section: '### 身份规则'
+  - file: docs/deploy.md
+    section: '### 门禁'
+  - file: docs/deploy.md
+    section: '### 发布哨兵'
+  - file: docs/deploy.md
+    section: '### issue 任务'
+  - file: docs/deploy.md
+    section: '### CLI'
+  - file: docs/deploy.md
+    section: '### 风险说明'
+  - file: internal/github/presets.go
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 5
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import Requires from '@/components/Requires.astro';
+
+<Requires ids={['github-oauth']} />
+
+触发规则让 GitHub 上的事件——新 issue、打标签、@Agent 账号、外部 PR、发布 CI 结束——自动新建全自动线程处理。门禁与线程限制由出站代理强制执行，约束这些线程能推送什么、能开什么样的 PR。本页的前提是已经连接好账号，见 [GitHub：仓库绑定、PR 与回流](/guide/automation/github/)。
+
+## 新建触发规则
+
+在项目设置的「GitHub」分组里，「触发规则」一节点「新建」。规则选一种「事件」：
+
+| 事件 | 标识 |
+|---|---|
+| 「新 issue」 | `issue_opened` |
+| 「打指定标签」 | `issue_labeled` |
+| 「@Agent 账号」 | `mention` |
+| 「issue 被重新打开」 | `issue_reopened` |
+| 「外部 PR（评审）」 | `pull_request_opened` |
+| 「发布 CI 结束（发布哨兵）」 | `workflow_run_completed` |
+
+不论驱动者档位，issue 与评论的内容都只放进首条提示词末尾的 `<untrusted-github-content>` 数据块，不作为指令。每条规则每小时至多建 10 个线程，`issue_opened` 与 `issue_reopened` 共用同一份额度。`mention` 规则只能在 Agent 账号已连接时创建。
+
+## 套用预设
+
+新建规则时可以「套用预设」。Oryn 内置三个预设：
+
+| 预设 | 事件 | 驱动者 | 规则选项 | 附带的门禁 |
+|---|---|---|---|---|
+| robomp 分诊 | `issue_opened` | `writers_and_author` | 实现需授权、完成提醒、自动关闭等待 4 小时 | 推送门禁与 PR 门禁；必需标题 `Repro`、`Cause`、`Fix`、`Verification`；要求关闭引用；修复 / 检查 / 测试命令 `bun run fix` / `bun check` / `bun run test` |
+| robomp PR 评审 | `pull_request_opened` | `anyone` | 评审只发 COMMENT | 无 |
+| robomp 发布哨兵 | `workflow_run_completed` | `writers` | 发布提交前缀 `chore: bump version to ` | 只开推送门禁；修复 / 检查命令 `bun run fix` / `bun check` |
+
+分诊会登记 issue 状态，并支持实现授权、任务时限、完成提醒与问题自动关闭；PR 评审只发 COMMENT。预设的门禁命令取 robomp 的默认值，可以在应用前修改。套用带门禁的预设时，规则编辑器提示是否把这份门禁应用到本项目（「把门禁应用到本项目」），应用后会替换本项目当前的门禁。
+
+## 选择驱动者档位
+
+规则的「驱动者」决定谁的发言能驱动 Agent。档位同样作用于已关联线程的跟进评论。
+
+| 档位 | 界面名称 | 放行 |
+|---|---|---|
+| `writers` | 「仅有写权限的人」 | 我的账号、规则维护者、`author_association` 为 OWNER / MEMBER / COLLABORATOR 的人，或查到对仓库有 write / admin 权限的人（只在我的账号对仓库有 push 权限时才查，结果缓存 5 分钟） |
+| `writers_and_author`（默认） | 「有写权限的人和作者」 | 在上一档之外，再加 issue 或 PR 的作者 |
+| `anyone` | 「任何人」 | 任何人，但按发送者限流：上一档的人不限，CONTRIBUTOR 每小时 10 次，其余每小时 3 次，超限记为 `ignored:sender_rate_limited` |
+
+- Bot 一律不驱动，除非它在规则的「评审机器人」列表里，这时它的发言视为维护者指令，不需要 @。
+- 「打指定标签」只看打标签的人，与档位无关：我的账号、仓库 owner、规则维护者，或查到写权限的人。
+
+**所用账号**：「任何人」档的规则与外部 PR 评审规则由不可信输入驱动，只用 Agent 账号；Agent 账号不可用时不建线程、不回退到我的账号，并给你发一条通知。其余规则建的线程按「自动化使用的账号」取账号，规则见 [GitHub：仓库绑定、PR 与回流](/guide/automation/github/)。
+
+## 开启推送 / 开 PR 门禁
+
+门禁是项目级配置，在项目设置里的「推送 / 开 PR 门禁」，默认关闭。开启后，线程推送或开 PR 前，Agent 须先用 `github_prepare` 工具跑过检查，出站代理只放行有通过记录的提交。
+
+| 字段 | 含义 |
+|---|---|
+| `push` | 推送门禁：经出站代理推送到 github.com 的每个 `refs/heads/*` 新 SHA，都必须有本环境 `push` 级以上的通过记录 |
+| `pr` | PR 门禁：创建 PR 时，head SHA 必须有 `pr` 级通过记录，正文还要满足下面两项 |
+| `prHeadings` | PR 正文必需的二级标题（不含 `## `） |
+| `requireClosingRef` | PR 正文必须含 `Fixes`、`Closes` 或 `Resolves #N` |
+| `fixCmd` / `checkCmd` / `testCmd` | 检查时执行的修复、检查、测试命令，时限依次为 600、600、3600 秒 |
+
+`github_prepare` 在线程工作目录里按顺序检查：
+
+1. HEAD 不是 detached。
+2. 当前分支不是默认分支（发布线程例外）。
+3. `origin/<默认分支>..HEAD` 非空。
+4. 把提交信息里的字面量 `\n` 改写为真换行（只改信息，tree 不变）。
+5. 运行修复命令，产生的改动并入 HEAD。
+6. 工作树干净。
+7. 区间内每个提交的作者等于线程身份的提交身份。
+8. 运行检查命令。
+9. `level=pr` 时再运行测试命令。
+
+`pr` 级记录同时满足 `push` 级。`skip_checks=true` 只跳过三条命令，必须带 `reason`；产生的记录带 `skipped` 标记，同样放行，并计入审计。
+
+推送门禁开启时，只有进行中的发布任务能推送或改写默认分支，其余线程一律被拒。门禁关闭（默认）或项目没有门禁时不检查默认分支。
+
+### 被拒时看到什么
+
+推送被拒时，git 显示：
+
+```text
+! [remote rejected] HEAD -> <分支> (oryn: <原因>)
+```
+
+REST / GraphQL 请求回 403，正文为 `oryn: <原因>`。被拒的请求不转发，但照样记一行审计。推送门禁、PR 门禁或任一项线程限制开启时，写请求体超过 1 MiB、带压缩编码、无法解析，或受管控的 GraphQL 参数无法静态求值，一律拒绝。Oryn 在仓库上建的 webhook 不论门禁开关，Agent 都改不了、删不掉。
+
+### 线程限制
+
+另有三项限制由建立任务的触发规则决定。出站代理每处理一个写请求都向控制面现查一次；现查失败时三项都按开启处理。
+
+| 限制 | 来源 | 效果 |
+|---|---|---|
+| 只读评审 | 外部 PR 评审规则（`pull_request_opened`）建的线程 | 拒绝推送、创建 PR、合并与一切改 ref 的 API |
+| 只发 COMMENT | 规则选项「评审只发 COMMENT」 | review 只放行 `COMMENT` 和没带 event 的待提交 review，`APPROVE` / `REQUEST_CHANGES` 被拒 |
+| 实现需授权 | 规则选项「实现需授权」 | 创建 PR 前必须已获实现授权（见下文） |
+
+## 用发布哨兵修复发布 CI
+
+发布哨兵规则（事件 `workflow_run_completed`，默认不建，可用 robomp 发布哨兵预设建）只处理已完成、head 提交信息以规则前缀开头的 run，默认前缀 `chore: bump version to `，前缀之后的部分就是版本号。每个仓库的每个版本对应一个状态：
+
+| 状态 | 含义 |
+|---|---|
+| `awaiting_ci` | 等待发布提交上的 CI 与 Release |
+| `fixing` | 发现阻塞结论，修复线程正在修 |
+| `green` | 全部 run 完成、没有阻塞结论，且 tag `v<version>` 有非草稿 Release |
+| `failed` | 修复轮数用尽、默认分支被别人推进、发布线程被删除或归档、Agent 调用 `github_abort_task`，或超时 |
+| `superseded` | 同一仓库出现了更新的版本；被取代的版本会中止其线程正在进行的回合 |
+
+- **阻塞结论**：`failure`、`timed_out`、`startup_failure`、`action_required`。
+- **修复轮数**：遇到阻塞结论时开启或续跑同一个修复线程，每轮加 1，**至多 5 轮**；第 5 轮之后仍阻塞就置为 `failed`。修复推送把 tag 移到新提交后，状态回到 `awaiting_ci`。
+- **期限**：`awaiting_ci` 自最后一次状态变化起超过 24 小时仍不是 `green`，置为 `failed` 并通知你；进入 `fixing` 起 24 小时内没有推送修复，同样置为 `failed`。
+- **通知**：终态不在 GitHub 上发言，只通知你。有线程时发线程通知；没有线程的版本只在 `failed` 时发一条系统通知。
+- **保留**：`green`、`failed`、`superseded` 的版本保留 30 天。
+
+只有 `awaiting_ci` 与 `fixing` 两个状态的发布线程享有推送门禁下推默认分支的例外，进入终态后例外随即收回。修复线程的首条消息首行为：
+
+```text
+[Oryn release sentinel on <owner>/<repo> v<version> — started automatically, not typed by the owner]
+```
+
+## 跟踪 issue 任务
+
+触发规则建立的 issue / PR 线程带一个任务，线程页头可以看到它的状态：
+
+| 状态 | 谁设置 |
+|---|---|
+| `new` | 建立任务时；终态任务被维护者重开时 |
+| `reproducing`、`fixing`、`reviewing`、`opened`、`needs_info` | Agent 推进任务时设置；`needs_info` 时还会加 `needs-info` 标签 |
+| `closed` | issue 在 GitHub 上被关闭（包括被自动关闭） |
+| `merged` | 关联的 PR 合并 |
+| `abandoned` | Agent 调用 `github_abort_task`，或你执行 `oryn github cleanup` |
+
+- **终态**：`closed`、`merged`、`abandoned`。进入终态时，Oryn 取消待执行的自动关闭并冻结线程的环境，线程本身保留。之后的非指令评论不再回流。维护者（我的账号、OWNER / MEMBER / COLLABORATOR、规则维护者）在评论里 @Agent 账号时，任务回到 `new`，评论照常回流并唤醒线程。
+- **实现授权**（规则开启「实现需授权」时）：满足任一条件，出站代理才放行本线程开 PR——分类是 `bug` 或 `documentation`；或者能授权的人在任务 issue 上打了 `accepted` 标签，或在评论里写了 `go ahead`（不区分大小写）。能授权的人是仓库 owner 本人、我的账号、规则维护者；评论还接受 `author_association` 为 OWNER 的作者。
+- **任务时限**：到点时清除时限、中止当前回合，并发一条线程通知。
+- **完成提醒**：GitHub 投递的回合正常结束时，任务状态仍是 `new`、`reproducing` 或 `fixing`，并且分类为 `bug`、`documentation` 或尚未分类，Oryn 就投递一条提醒，每个任务至多 2 次。
+- **自动关闭**：Agent 回答问题后发起自动关闭，N 小时后（默认 4，范围 1–720）只检查 issue 作者在那条回答上的 👎：有就取消，没有就以 `state_reason=completed` 关闭 issue。别人的 👎 不算。等待期间有人发新评论、issue 被外部关闭或任务进入终态，排期都取消。
+
+## 用命令行查看与处理
+
+`oryn github` 的子命令都输出表格，支持 `--json`：
+
+```bash
+# 拉取线上 issue，合成 issues.opened 交给触发规则，打印线程 id
+oryn github triage <owner>/<repo>#<n> [--rule <规则 id>]
+# 重放 7 天内已结束的 webhook 投递
+oryn github replay <投递 guid>
+# issue 任务、发布状态与仓库 webhook 状态
+oryn github status
+# 把 issue 线程置为 abandoned 并冻结其环境（不改动远端）
+oryn github cleanup <owner>/<repo>#<n>
+# 写操作审计
+oryn github audit [--thread <线程 id>] [--repo <owner>/<repo>]
+```
+
+## 控制风险
+
+<Aside type="caution">
+OAuth App 的令牌不能按仓库收窄，对账号能看到的全部仓库都有效；出站代理也不按仓库拦截 github.com。线程能做什么，只取决于它所用账号的权限。因此：
+
+- 全自动线程应使用 Agent 账号，这个账号只被邀请到确实需要的仓库，权限给到够用即可。
+- 不要把有大量组织权限的个人账号设为 Agent 账号。
+- 「任何人」档规则与外部 PR 评审由不可信输入驱动，它们只用 Agent 账号；Agent 账号不可用时宁可不跑，也不退回到我的账号。
+</Aside>
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 每条规则建线程 | 每小时至多 10 个 |
+| 「任何人」档限流 | CONTRIBUTOR 每小时 10 次，其余每小时 3 次 |
+| 写权限查询缓存 | 5 分钟 |
+| 门禁命令时限 | 修复 600 秒、检查 600 秒、测试 3600 秒 |
+| 受管控写请求体 | 至多 1 MiB |
+| 发布哨兵修复轮数 | 至多 5 轮 |
+| 发布哨兵期限 | 24 小时 |
+| 发布状态保留 | 30 天 |
+| 完成提醒 | 每个任务至多 2 次 |
+| 自动关闭等待 | 默认 4 小时，范围 1–720 |
+
+## 相关
+
+- [GitHub：仓库绑定、PR 与回流](/guide/automation/github/)
+- [Git 访问范围与门禁](/security/git-scope/)
+- [主线：结果汇总与提醒](/guide/assistant/mainline/)
+- [`oryn github` 命令参考](/reference/cli/github/)

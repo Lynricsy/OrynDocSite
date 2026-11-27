@@ -1,0 +1,168 @@
+---
+title: GitHub：仓库绑定、PR 与回流
+description: 连接「我的账号」与「Agent 账号」，让环境里的 git 与 gh 免登录，并把 PR 状态、评审、评论与 CI 结果带回线程。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### GitHub'
+  - file: docs/deploy.md
+    section: '## 13. GitHub 集成（M15）'
+  - file: docs/deploy.md
+    section: '### 注册 OAuth App'
+  - file: docs/deploy.md
+    section: '### Scope'
+  - file: docs/deploy.md
+    section: '### 组织批准与 SAML SSO'
+  - file: docs/deploy.md
+    section: '### 仓库绑定与 orb 内凭据'
+  - file: docs/deploy.md
+    section: '### 身份规则'
+  - file: docs/deploy.md
+    section: '### 事件来源与额度'
+  - file: docs/deploy.md
+    section: '### 审计'
+  - file: README.md
+    section: '## Agent 配置、记忆与集成'
+  - file: schema/openapi.yaml
+  - file: web/src/pages/settings/registry.ts
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 4
+---
+
+import Requires from '@/components/Requires.astro';
+
+<Requires ids={['github-oauth']} />
+
+Oryn 通过管理员注册的 GitHub OAuth App 连接两个 GitHub 用户：「我的账号」与「Agent 账号」。连接之后，执行环境（orb）里的 `git` 与 `gh` 不用登录；项目按仓库地址自动绑定，线程推送的提交成为 PR 后，PR 状态、评审、评论与 CI 结果回到线程。触发规则、门禁与发布哨兵见 [GitHub 自动化](/guide/automation/github-automation/)。
+
+## 连接两个账号
+
+在「设置 → Git 与 GitHub」的「GitHub 账号」卡片里，分别对「我的账号」与「Agent 账号」点「连接」。授权链接 10 分钟内有效；要用另一个 GitHub 账号授权时，点「复制链接」，在已登录目标账号的另一个浏览器里打开。两个槽位不能是同一个账号。
+
+| 账号 | 用途 |
+|---|---|
+| 我的账号 | 交互式线程、首屏新建的线程、项目表单里的仓库列表、仓库绑定、仓库 webhook 的管理、仓库级轮询与发布哨兵的读请求 |
+| Agent 账号 | 专门给 Agent 用的第二个真实 GitHub 账号。可选，但全自动线程默认用它 |
+
+卡片会列出实际授予的 scope。缺项时显示「缺少权限」和缺少的 scope；账号的刷新令牌失效时显示「需要重新授权」。两种情况都要重新连接。
+
+单独断开「我的账号」时，Oryn 先删除它在各仓库建的 webhook，因为这些 webhook 由我的账号管理。
+
+GitHub OAuth App 的注册、回调地址与 scope 由管理员完成，见 [GitHub 集成：注册 OAuth App](/admin/components/github-oauth/)。
+
+## 选择自动化使用的账号
+
+「设置 → Git 与 GitHub」里的「自动化使用的账号」决定全自动线程以哪个账号操作 GitHub，取值 `agent`（默认）或 `user`。
+
+| 线程 | 身份 |
+|---|---|
+| 交互式线程、首屏新建的线程 | 我的账号 |
+| 全自动线程：GitHub 触发规则、项目级定时、发布哨兵 | 「自动化使用的账号」，默认 `agent` |
+| Agent 在环境内派生的子线程 | 沿用父线程 |
+
+全自动线程的身份按以下规则决定：
+
+- **不可信入口**：驱动者为「任何人」的触发规则，以及外部 PR 评审规则，只用 Agent 账号。Agent 账号未连接或需要重新授权时**不回退**：不建线程，事件记为 `ignored:agent_required`，同时给你发一条通知（`GitHub trigger skipped`）。
+- **定时的入站 Webhook**：同样只用 Agent 账号，不可用时这次运行失败（`github_agent_required`），不回退。
+- **其余全自动线程**：设置为 `agent` 且 Agent 账号可用时用它；否则回退到我的账号，并在首条提示词末尾追加一行：
+
+  ```text
+  [Oryn: the Agent GitHub account is unavailable, so this automated thread uses the owner's GitHub account instead.]
+  ```
+
+  设置为 `user` 时一律用我的账号。
+
+断开 Agent 账号**不会**把设置改回 `user`；Agent 账号未连接时也可以选 `agent`。响应 @Agent 账号的触发规则只能在 Agent 账号已连接时创建。
+
+## 在环境里使用 git 与 gh
+
+账号连接后，任何工作环境里的 `git` 与 `gh` 都可以直接使用，与项目是否绑定无关，只要线程身份对应的槽位可用。真实令牌由出站代理注入，环境的环境变量、磁盘和出站代理的响应里都没有真实令牌。
+
+- **git**：整个 `github.com` 主机由出站代理注入令牌。github.com 上不按仓库限制，能做什么由账号本身的权限决定。
+- **gh**：环境里的 `~/.oryn/gh/hosts.yml` 只有占位令牌 `oryn-proxied`。`gh` 发往 `api.github.com` 与 `uploads.github.com` 的请求（后者用于 `gh release upload`）由出站代理换上真实令牌，响应里的令牌换成 `oryn-redacted`。
+- **提交作者**：Agent 身份的环境固定用 Agent 账号（`<id>+<login>@users.noreply.github.com`）。我的账号身份依次取项目覆盖、所有者默认，最后是由我的 GitHub 账号推出的同格式身份。
+
+Runner 线程与协调宿主不下发任何 GitHub 凭据。我的账号未连接或需要重新授权时，我的账号身份的环境回落到密钥 `git/github.com/token`；Agent 身份的环境在 Agent 账号不可用时不回落，`git` 与 `gh` 都不可用。
+
+凭据为什么不进环境、github.com 之外的主机怎样处理，见[凭据隔离与出站代理](/security/credentials/)与 [Git 访问范围与门禁](/security/git-scope/)。
+
+## 让项目自动绑定仓库
+
+项目的仓库地址是 `https://github.com/<owner>/<repo>`，并且我的账号能读到这个仓库时，项目自动绑定，不需要手动操作。
+
+- 仓库改名或转移后，Oryn 自动更新仓库地址；已有的环境在下次 setup 或唤醒时把 `origin` 改到新地址。
+- 我的账号是仓库 admin 时，Oryn 还在仓库上建一个 webhook。最后一个绑定该仓库的项目解绑、归档或删除后，这个 webhook 随之删除。
+
+项目设置的「GitHub」分组显示绑定状态。未绑定的原因有三种：
+
+| 原因 | 含义 | 处理 |
+|---|---|---|
+| `not_found` | 仓库不存在，或我的账号读不到它 | 检查仓库地址与账号权限 |
+| `org_restricted` | 仓库所在组织开启了 OAuth App 访问限制，没有批准 Oryn 的 OAuth App | 界面给出「申请组织批准」的链接，由组织管理员批准 |
+| `sso_required` | 组织开启了 SAML SSO，令牌还没做 SSO 授权 | 界面给出「完成 SSO 授权」的链接 |
+
+组织批准或完成 SSO 授权之后，下一轮同步（每 10 分钟）会自动恢复；也可以重新连接我的账号，连接完成后会立即重新绑定全部项目。
+
+## 查看 PR 状态与回流
+
+线程推送的提交成为 PR 的头提交后，线程页头显示 PR 状态与 CI 结果，PR 合并即标记为已交付。评审、评论与 CI 失败回流进线程：
+
+- 评审、行内评审评论、会话评论在 15 秒窗口内合成一条自动消息。
+- CI 转为失败立即投递，最多 5 轮。
+- 单个 PR 关联每小时最多回流 20 条，超限时暂停这个关联。
+- Agent 自己的写操作不回流，也不触发规则。
+
+回流消息在转录里显示为独立的系统卡片，不会和你亲手发的消息混淆；CI 失败、要求修改等需要留意的事件会标色，长正文自动折叠，评论里的图片只显示为链接、不会自动加载。
+
+项目设置的「GitHub」分组里有三个回流开关：「评审意见回流」「评论回流」「CI 失败回流」。
+
+和 PR 不在同一仓库的关联（例如向上游开的 PR）只在两种情况下建立：出站代理观察到本线程创建了这个 PR；或者 PR 的头提交是本线程推送的，并且作者是已连接的两个账号之一。
+
+## 了解事件从哪里来
+
+Oryn 用三种来源取得 GitHub 事件，后续处理完全相同：
+
+| 来源 | 何时使用 | 做法 |
+|---|---|---|
+| `webhook` | 已绑定的仓库，且我的账号是该仓库 admin | Oryn 建的仓库 webhook 实时投递，不占 API 额度 |
+| `poll` | 有 `active` webhook 的仓库 | 每 30 秒读一次 webhook 的投递日志补漏；GitHub 访问不到 webhook 地址时靠这条路补齐 |
+| `rest` | 没有 `active` webhook 的情况 | 每 60 秒用 REST 轮询仓库与线程关联的 issue / PR；对象进入终态满 24 小时后不再轮询 |
+
+「设置 → Git 与 GitHub」的「仓库 webhook」卡片按仓库列出状态（`active` / `no_admin` / `org_restricted` / `sso_required` / `error`）和最近一次投递，来源显示为「实时」或「轮询」。
+
+同一个投递只处理一次。投递记录与载荷保留 7 天，期间可以重放已经处理完的投递：
+
+```bash
+oryn github replay <投递 guid>
+```
+
+## 查看审计
+
+出站代理为每个环境的 GitHub 写操作记一行审计：非 GET 的 REST 请求、GraphQL mutation（query 不记），以及 `git-receive-pack`（每个 ref 一行）。被门禁拒绝的请求也记。审计保留 30 天，可以在设置页的「审计」卡片里按仓库筛选，或用命令按线程、仓库查询：
+
+```bash
+oryn github audit --repo <owner>/<repo>
+oryn github audit --thread <线程 id>
+```
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 授权链接有效期 | 10 分钟 |
+| 评审与评论的合并窗口 | 15 秒 |
+| CI 失败回流 | 最多 5 轮 |
+| 单个 PR 关联的回流 | 每小时 20 条 |
+| 绑定与 webhook 的同步 | 每 10 分钟 |
+| 投递记录与载荷 | 保留 7 天 |
+| 写操作审计 | 保留 30 天 |
+
+## 相关
+
+- [GitHub 自动化：触发规则、门禁与发布哨兵](/guide/automation/github-automation/)
+- [GitHub 集成：注册 OAuth App](/admin/components/github-oauth/)
+- [Git 访问范围与门禁](/security/git-scope/)
+- [查看改动、提交与开 PR](/guide/workbench/changes/)
+- [`oryn github` 命令参考](/reference/cli/github/)

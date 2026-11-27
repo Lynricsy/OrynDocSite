@@ -1,0 +1,111 @@
+---
+title: 成本统计与预算
+description: 在统计页按模型、项目、Space 与用途查看成本、缓存命中率与产出，导出 CSV，并设置日 / 月预算告警。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### 成本与产出统计'
+  - file: docs/deploy.md
+    section: '## 9. 统计分析（M10）'
+  - file: web/src/pages/StatsPage.tsx
+  - file: web/src/components/stats/BudgetCard.tsx
+  - file: web/src/pages/settings/NotificationsSettings.tsx
+  - file: web/src/pages/settings/BudgetSettings.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 7
+---
+
+import Shot from '@/components/Shot.astro';
+
+控制面直接从会话条目入库模型调用、工具执行与环境生命周期事件，统计页 `/stats`、`oryn stats` 与全局助手的 `get_stats` 都从这些数据现算，不需要额外服务。分支 fork 造成的历史重复计费会自动剔除。可以按模型、项目、Space 或用途查看成本、缓存命中率、首字延迟与交付提交数。
+
+<Shot id="site/stats" alt="统计页「用量」页签：成本、tokens、缓存命中率、请求、回合、工具调用、平均首字延迟与输出速度八张卡片，下方是日 / 月预算进度条与按模型分色的每日成本堆叠柱状图" />
+
+## 查看统计页
+
+统计页有三个页签：
+
+| 页签 | 内容 | 可用的筛选 |
+|---|---|---|
+| 「用量」 | 成本、tokens、缓存命中率、请求、回合、工具调用、首字延迟（TTFT）与输出速度；按「模型」「项目」「空间」「用途」分组 | 项目、空间、模型、线程 |
+| 「Orb」 | 执行环境（orb）的运行、冻结、停机时长与 setup 汇总 | 项目 |
+| 「产出」 | 新建、交付、归档的线程数，提交数与每交付成本 | 项目、空间 |
+
+「时间范围」可选「今天」「近 7 天」「近 30 天」「近 90 天」「本月」「全部」或「自定义…」。
+
+升级后首次启动时，控制面会在后台重算历史数据，期间统计页顶部显示回填进度，其它功能照常。
+
+## 导出 CSV
+
+统计页的「导出」菜单有三项：
+
+- 「当前视图 CSV」：当前页签、时间范围与筛选下的汇总。
+- 「当前视图 JSON」：同上，JSON 格式。
+- 「用量明细 CSV」：时间范围与筛选内的用量明细。
+
+命令行加 `--csv` 输出服务端生成的 CSV。
+
+## 用命令行查询
+
+`oryn stats` 在你的电脑上运行，不带子命令时等同 `oryn stats usage`：
+
+```bash
+# 近 7 天按模型汇总（缺省）
+oryn stats
+# 近 30 天按项目汇总，附每日时间序列
+oryn stats usage --since 30d --by project --series day
+# 指定日期范围、只看一个项目，导出 CSV
+oryn stats usage --from 2026-11-01 --to 2026-11-26 --project myapp --csv > usage.csv
+# 工具调用次数与错误率
+oryn stats tools
+# 环境运行 / 冻结 / 停机时长与 setup 汇总
+oryn stats orbs --by project
+# 线程产出：新建 / 交付 / 归档、提交数、每交付成本
+oryn stats output --by week
+# 单个线程自创建以来的用量
+oryn stats thread <线程 id>
+```
+
+`--by` 的取值：`usage` 为 `total` `hour` `day` `week` `month` `model` `thread` `project` `space` `purpose`；`orbs` 为 `type` `day` `week` `month` `project` `orb`；`output` 为 `day` `week` `month` `project` `space`。非时间分组最多列出 `--limit` 组（1–500，缺省 50），其余并入 `__other__`。`--since` 与 `--from` 互斥。
+
+## 设置预算与告警
+
+在「设置 → 通知与预算」的「预算」里设日上限与月上限（美元），以及「预警线」与「时区」。统计页的预算卡片点「到设置里修改」也会进入这里。
+
+等价命令：
+
+```bash
+# 日上限 20 美元、月上限 300 美元，用量到 80% 时先预警（只改给出的项，并启用）
+oryn stats budget set --daily 20 --monthly 300 --warn 80 --tz Asia/Shanghai
+# 查看上限、当日 / 当月已花与级别
+oryn stats budget show
+# 停用预算告警（保留已设的上限）
+oryn stats budget off
+```
+
+`--daily` 或 `--monthly` 给 `0` 表示取消该上限；`--warn` 取 0–99，0 表示不预警、只在超出时告警。
+
+设好后，控制面每 60 秒评估一次，越过预警线或上限时发一条不属于任何线程的系统通知：应用内、推送，以及在「设置 → 通知与预算」里订阅了「预算告警」事件的渠道。同一周期同一级别只发一次。渠道的配置见[通知渠道](/guide/automation/notifications/)。
+
+## 了解统计的可信边界
+
+用量来自环境里的会话文件。控制面入库时会钳制明显不合理的数值与字符串，但环境里的 Agent 仍可以改写自己的会话来少报用量。预算告警是提醒，不是对抗恶意 Agent 的计费防线；需要硬上限时，在模型服务商一侧设置额度。
+
+统计数据的保留期与手动重算由管理员配置，见[统计数据的保留与重算](/admin/operations/stats-retention/)。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 预算评估间隔 | 60 秒 |
+| 预警线 | 0–99% |
+| `--limit` | 1–500，缺省 50 |
+| `--since` 缺省窗口 | `7d` |
+
+## 相关
+
+- [通知渠道](/guide/automation/notifications/)
+- [统计数据的保留与重算](/admin/operations/stats-retention/)
+- [`oryn stats` 命令参考](/reference/cli/stats/)

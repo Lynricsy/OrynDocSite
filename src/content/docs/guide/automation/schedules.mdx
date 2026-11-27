@@ -1,0 +1,165 @@
+---
+title: 定时任务
+description: 让线程按 Cron 或固定间隔巡检，或每次拉起全新线程运行；用运行前闸门在没事时跳过，用 [SILENT] 安静结束。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### 定时任务'
+  - file: README.md
+    section: '## 全局助手与 Space'
+  - file: web/src/components/thread/ThreadHeader.tsx
+  - file: web/src/pages/settings/ProjectSchedules.tsx
+  - file: web/src/pages/settings/registry.ts
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 2
+---
+
+定时任务按时间表（或手动、Webhook）把一段提示词交给 Agent 执行，用来做巡检这类不需要你在场的工作。定时有两种模式：在一个已有线程里反复触发，或者每次新建一个隔离线程。
+
+## 选择模式
+
+| 模式 | 界面里的名称 | 命令 | 每次运行时 |
+|---|---|---|---|
+| 线程内定时 | 「线程内定时」 | `oryn schedule set` | 在单个已有线程内按 Cron 或固定间隔触发，提示词作为新消息出现在该线程。每个线程一个 |
+| 项目级定时 | 「每次新建线程」 | `oryn schedule add` | 每次拉起全新的隔离线程，按保留数自动归档历史运行；可指定开场的角色（`--role`）或模型 |
+
+只有项目级定时能开[入站 Webhook](/guide/automation/webhooks/)。
+
+## 给已有线程设定时
+
+在线程页头的菜单里选「定时…」，填写触发方式、提示词与时区后保存。
+
+等价命令（在你的电脑上运行；在执行环境（orb）内运行时省略线程参数，作用于当前线程）：
+
+```bash
+# 工作日 9:00 巡检
+oryn schedule set <线程 id> --cron "0 9 * * 1-5" --prompt "检查 CI 与未处理的 issue，汇总要我决定的事"
+# 每 30 分钟一次，到截止时刻停止
+oryn schedule set <线程 id> --every 30m --until 2026-12-31T23:59:59+08:00 --prompt-file check.md
+```
+
+触发方式三选一：`--cron`（5 段，或 `@hourly` `@daily` `@weekly` `@monthly` `@yearly`）、`--every`（Go 时长，至少 `1m`）、`--at`（RFC3339 时刻，或 `+15m` 这样的相对时长，只运行一次）。提示词里可以用占位符 `{{now}}` `{{date}}` `{{scheduled_at}}` `{{run_number}}` `{{last_run_at}}`。`--tz` 指定 IANA 时区，缺省取环境变量 `TZ`，再缺省 UTC。
+
+## 新建项目级定时
+
+在项目设置的「定时任务」分组里点「新建定时任务」。全部定时在「设置 → 自动化」里列出。
+
+等价命令：
+
+```bash
+# 每天 9:00 在项目 myapp 里新建线程运行，只保留最近 10 次
+oryn schedule add --project myapp --name 每日巡检 --cron "0 9 * * *" \
+  --prompt "检查依赖更新并汇总" --keep 10
+# 不关联项目
+oryn schedule add --no-project --name 周报 --cron "@weekly" --prompt-file weekly.md
+```
+
+除了触发方式与提示词，项目级定时还可以指定：
+
+| 参数 | 作用 |
+|---|---|
+| `--role` / `--model` | 新线程开场的角色或模型，二者互斥 |
+| `--thinking` | 思考档位 |
+| `--provider` / `--type` | 新线程环境的 Provider 与类型 |
+| `--space` | 新线程加入的 [Space](/guide/automation/spaces/) |
+| `--keep` | 只保留最近 N 个未归档的运行线程（1–50，缺省 5），更早且已静止的自动归档 |
+| `--overlap` | 上一次运行未结束时：`skip`（缺省）跳过本次，`allow` 照常新建（至多 3 个并存） |
+| `--disabled` | 保存为暂停 |
+
+## 只手动或由 Webhook 触发
+
+`--manual` 让项目级定时没有时间触发，只由手动触发或入站 Webhook 触发。它与 `--cron` / `--every` / `--at` 互斥，不能带 `--until`。界面里对应触发方式「手动 / Webhook」。
+
+```bash
+oryn schedule add --project myapp --name 告警处理 --manual --prompt-file triage.md
+# 立即运行一次（不改下一次时间；上一次未结束时回 schedule_busy）
+oryn schedule run <定时 id>
+```
+
+## 设置运行前闸门
+
+闸门是每次运行前（含手动与 Webhook 触发）先执行的一条检查命令，不启动 Agent、不调用模型。两种模式都可以挂闸门：编辑定时的「运行前闸门」，或用命令参数 `--gate-command`、`--gate-host`、`--gate-timeout`。
+
+```bash
+# 在控制面本机沙箱里执行 gates/ 下的脚本，最多 120 秒
+oryn schedule update <定时 id> --gate-command ./check.sh --gate-timeout 120
+# 改到 SSH 主机 db-1 上执行
+oryn schedule update <定时 id> --gate-host db-1
+# 改回本机执行
+oryn schedule update <定时 id> --gate-host ""
+# 去掉闸门
+oryn schedule update <定时 id> --no-gate
+```
+
+### 跳过条件
+
+命令以退出码 0 结束，并且最后一个非空输出行是下面这一行时，本次运行记为跳过（`gate`）：
+
+```json
+{"wakeAgent": false}
+```
+
+其余情况——其它输出、非 0 退出、超时、执行环境不可用——照常运行，闸门的输出或失败原因附在提示词前面交给 Agent。Webhook 的请求内容不交给闸门。`--gate-timeout` 的范围是 1–600 秒，缺省 60。
+
+闸门只能由你设置；Agent 改写定时时沿用现值。在执行环境内用 `oryn schedule set` 不能设置闸门参数。
+
+### 在控制面本机执行
+
+省略 `--gate-host` 时，闸门在控制面所在机器的沙箱里用 `/bin/sh -c` 执行：
+
+- 工作目录是数据目录下 `gates/` 的一次性副本，脚本放在那里即可用 `./check.sh` 调用；沙箱里的写入不会写回。`HOME` 与 `TMPDIR` 也是一次性目录。
+- 控制面以 root 运行时，沙箱以 nobody 身份运行，并施加 Landlock 与 seccomp：只能读系统目录，读不到控制面的数据、配置与密钥。
+- TCP 只能连控制面开在回环上的出站代理，代理只放行公网地址：`curl`、`python3` 能访问公网 HTTP(S)，连不上内网和本机服务。
+- 命令跑在独立的 PID 命名空间里，命令结束或超时时，它留在后台的进程（含 `setsid` 脱离的）一并被杀掉。
+
+前提：Linux ≥ 6.7（Landlock ABI ≥ 4），并且控制面能建 PID 命名空间（以 root 运行，或非 root 时内核允许非特权 user namespace；默认 seccomp 配置的 Docker 容器里建不了）。不满足时不能保存本机闸门，改用 SSH 主机。
+
+### 在 SSH 主机上执行
+
+`--gate-host <名称>` 经 SSH 网关在登记的主机上执行，适合要读那台机器状态的检查。主机按定时的范围解析：全局主机加所在项目的主机。项目级定时是全自动运行，所选主机须勾选「允许全自动线程使用」。执行记入 SSH 审计。主机的登记见 [SSH 主机](/guide/automation/ssh-hosts/)。
+
+## 用 `[SILENT]` 安静结束
+
+工作线程里全由自动化投递（定时、触发规则）开启的回合，如果 Agent 的最后一条回复是 `[SILENT]`（整条，或独占第一行 / 最后一行，不区分大小写），这一回合按沉默结束：不置未读、不发完成通知，也不交给助手。你亲自发过消息的回合、出错的回合不受影响。
+
+可以在提示词里要求 Agent 没有发现时只回复 `[SILENT]`。
+
+## 把结果交给助手
+
+打开定时的「交给助手」后，运行结果汇到全局助手的[主线](/guide/assistant/mainline/)，助手判断值得说才告诉你。
+
+## 管理定时
+
+```bash
+# 列出定时（--project 只列该项目；none = 没有项目的）
+oryn schedule ls --project myapp
+# 最近的运行，新的在前（-n ≤ 100）
+oryn schedule runs <定时 id> -n 20
+oryn schedule pause <定时 id>
+# 从现在起重新计算下一次，不补跑暂停期间错过的
+oryn schedule resume <定时 id>
+# 删除定时，连同运行记录
+oryn schedule rm <定时 id>
+```
+
+`<定时 id>` 写 `sch_…`，线程内定时也可以写线程 id。`update` 只改给出的参数。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 线程内定时 | 每线程 1 个 |
+| `--every` | 至少 `1m` |
+| `--keep` | 1–50，缺省 5 |
+| `--overlap allow` 并存运行 | 至多 3 个 |
+| `--gate-timeout` | 1–600 秒，缺省 60 |
+| `oryn schedule runs -n` | 至多 100 |
+
+## 相关
+
+- [入站 Webhook](/guide/automation/webhooks/)
+- [SSH 主机](/guide/automation/ssh-hosts/)
+- [主线：结果汇总与提醒](/guide/assistant/mainline/)
+- [`oryn schedule` 命令参考](/reference/cli/schedule/)

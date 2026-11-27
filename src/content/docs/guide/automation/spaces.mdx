@@ -1,0 +1,91 @@
+---
+title: Space：并行协调多条线程
+description: 为一个阶段目标建 Space，让协调者拆解目标、并发派出工作线程，并在需要你决策时汇总提醒。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '## 全局助手与 Space'
+  - file: docs/features.md
+    section: '### Space 协调者'
+  - file: README.md
+    section: '## 全局助手与 Space'
+  - file: web/src/components/layout/ThreadsPane.tsx
+  - file: web/src/components/space/SpaceDialog.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 1
+---
+
+import Shot from '@/components/Shot.astro';
+import Requires from '@/components/Requires.astro';
+
+<Requires ids={['coordinator']} />
+
+Space 由三部分组成：一个目标、一条与协调者对话的协调聊天，以及关联的项目。协调者负责拆解阶段目标、并发创建与检视工作线程，需要人工决策时汇总提醒你。适合一个目标要拆成几条线程并行推进的场合，例如一次发布前的多项收尾工作。
+
+<Shot id="site/space" alt="Space 的协调聊天：协调者调用 list_threads 与 read_thread 汇报三条工作线程的进展；右栏列出近 30 天的交付统计、定时、需要你与进行中的线程" />
+
+## 新建 Space
+
+在侧栏「空间」分组标题行点「新建空间」，填写：
+
+| 字段 | 作用 |
+|---|---|
+| 「名称」 | Space 的名称，不能与已有的 Space 重名 |
+| 「目标」 | 协调者据此规划工作；之后随时可改 |
+| 「默认项目」 | 空间里新建的线程默认用这个项目 |
+
+新建 Space 会同时建出它的协调聊天线程。在协调聊天里说明要做的事，协调者开始派线程。
+
+等价命令：
+
+```bash
+# 打印 Space id
+oryn space create <名称> --goal "<一句话目标>" --project <项目名称或 id>
+# 列出 Space（--archived 含已归档）
+oryn space ls
+# 显示一个 Space
+oryn space show <名称或 id>
+```
+
+已有的线程可以用「加入线程」加进 Space；线程的操作菜单里有「移出空间」。
+
+## 让协调者派出工作线程
+
+协调者派出的是独立的工作线程，不是嵌套的子 Agent。每条工作线程用什么配置启动，由协调者按下面的规则决定：
+
+- **角色（role）**：未指定角色与模型时，落到 `default`。也可以指定一个可用的子 Agent 角色，包括内置子 Agent 与 `agents/*.md` 里定义的子 Agent；轮换顺序（`cycleOrder`）里的角色和被禁用的子 Agent 不能用。指定后，工作线程以该子 Agent 的提示词、工具白名单与默认模型 / 思考档位启动。
+- **模型**：可以显式覆盖 `model`。协调者用 `list_models` 查询可用模型。
+- **思考档位**：可以显式覆盖 `thinkingLevel`。
+
+要让某条工作线程用特定的模型或思考档位，在协调聊天里向协调者说明。子 Agent 的启停与模型覆盖在[子 Agent](/guide/agent/subagents/) 页配置。
+
+## 了解协调者的限制
+
+协调者跑在控制面宿主的严格沙箱里：独立系统账号、Landlock LSM、seccomp-bpf 与 Linux 命名空间，沙箱里唯一能连的是回环上通往控制面的出站代理端口。由此带来以下限制：
+
+- 只开放内置的 `read` 与 `write` 工具。
+- 不能联网，没有 MCP。
+- 不能读写或操控 Runner 线程。
+
+沙箱的细节见[协调沙箱与不可信输入](/security/sandbox-untrusted/)。
+
+## 删除 Space
+
+在 Space 的操作菜单里选「删除空间」。协调聊天一并删除，其中的工作线程保留并移出空间。
+
+等价命令：
+
+```bash
+oryn space rm <名称或 id>
+```
+
+不想删除时，可以「归档空间」。
+
+## 相关
+
+- [定时任务](/guide/automation/schedules/)：`oryn schedule add --space` 让每次运行建出的线程加入指定 Space。
+- [认识全局助手](/guide/assistant/overview/)
+- [协调宿主：启用全局助手与 Space](/admin/components/coordinator/)
+- [`oryn space` 命令参考](/reference/cli/space/)

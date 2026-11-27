@@ -1,0 +1,153 @@
+---
+title: SSH 主机
+description: 登记目标机与钥匙，让执行环境里的 Agent 用主机名读写远端文件、执行命令，私钥留在控制面，每条命令记审计。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### SSH 主机'
+  - file: docs/deploy.md
+    section: '## 15. SSH 主机与控制面网关（M18）'
+  - file: internal/sshgw/hosts.go
+  - file: internal/sshgw/terminal.go
+  - file: web/src/pages/settings/registry.ts
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 6
+---
+
+import Shot from '@/components/Shot.astro';
+
+登记一台主机之后，执行环境（orb）与 Runner 里的 Agent 直接用主机名访问它。连接都由控制面的 SSH 网关代拨：Agent 只连环境本机的 `127.0.0.1:7822`，网关再连目标机。私钥和密码只加密存在控制面的数据库里，不进环境或 Runner，每条命令记审计。
+
+目标机（以及跳板）要能从**控制面所在的机器**访问；环境或 Runner 能不能直接访问无所谓，环境的网络隔离也不用为 SSH 开口子。
+
+<Shot id="site/ssh" alt="「SSH 主机」设置页：全局主机列表带标签、全自动可用与端口转发标记和连接状态，下方是钥匙列表与网关审计表" />
+
+## 生成或导入钥匙
+
+在「设置 → SSH 主机」的「钥匙」一节：
+
+- 点「生成钥匙」生成一把 ed25519 钥匙，把显示的公钥加到目标机用户的 `~/.ssh/authorized_keys`。
+- 点「导入私钥」导入已有私钥。带口令的私钥在导入时解开，之后不再需要口令，口令不保存。
+
+等价命令：
+
+```bash
+# 生成钥匙，公钥打印到标准输出
+oryn ssh key gen deploy
+# 导入私钥（- 表示从标准输入读取）
+oryn ssh key import deploy ~/.ssh/id_ed25519 --passphrase-file <口令文件>
+# 再次打印公钥（authorized_keys 一行）
+oryn ssh key pub deploy
+oryn ssh key ls
+```
+
+也可以不用钥匙、改用密码登录；遇到多因素认证会直接失败。仍有主机使用的钥匙不能删除。
+
+## 登记主机
+
+在「设置 → SSH 主机」点「添加主机」。登记后立即测试一次连接。
+
+```bash
+# 全局主机，用钥匙登录
+oryn ssh add prod-web --host 192.0.2.21 --user deploy --key deploy --tag prod
+# 用密码登录，密码从标准输入读取
+oryn ssh add legacy --host legacy.example.com --user admin --password-stdin
+```
+
+| 字段 | 命令参数 | 说明 |
+|---|---|---|
+| 「名称」 | `<name>` | 环境里用这个名字连接。字母、数字与 `_` `.` `-`，最长 64 |
+| 「地址」 / 「端口」 | `--host` / `--port` | 目标机地址，端口缺省 22 |
+| 「登录用户」 | `--user` | |
+| 「钥匙」 / 「密码」 | `--key` / `--password-stdin` | 认证方式二选一 |
+| 「跳板」 | `--jump` | 经另一台已登记的主机连过去 |
+| 「标签」 | `--tag` | 可重复，最多 16 个 |
+| 「描述」 | `--desc` | |
+| 「允许全自动线程使用」 | `--allow-automation` | 见下文 |
+| 「允许本地端口转发（ssh -L）」 | `--allow-forward` | 见下文 |
+
+修改用 `oryn ssh set <name>`，只改给出的字段；`--no-jump` 取消跳板。
+
+### 全局主机与项目主机
+
+主机有两种作用范围：
+
+- **全局主机**：对所有工作环境与 Runner 线程可见。
+- **项目主机**：只对该项目的环境与属于该项目的 Runner 线程可见。在项目设置的「SSH 主机」分组里登记，或命令加 `--project <项目>`。
+
+同名时项目主机优先。协调宿主不接入网关。
+
+### 跳板
+
+「跳板」让网关经另一台已登记的主机连到目标机，支持多级跳板链，最多 5 级。项目主机的跳板可以是同项目或全局主机。
+
+## 在环境里使用主机
+
+环境里的 Agent 有三种用法：
+
+| 用法 | 示例 |
+|---|---|
+| 按路径读写文件 | `ssh://<名>/<路径>` |
+| 在终端工具里登录或执行命令 | `ssh <名>` |
+| 一次在多台机器上并发执行 | `ssh_exec_many` 工具 |
+
+默认只允许执行命令、交互 shell 与 SFTP。勾选「允许本地端口转发（ssh -L）」后才接受 `ssh -L`；远程转发、agent 转发与 X11 一律拒绝。
+
+Runner 不修改你本机的 `~/.ssh`：`orbd` 为每个线程生成一把临时密钥供网关识别线程，在 bash 里用下面的命令连接：
+
+```bash
+ssh -F ~/.oryn/ssh/config <名>
+```
+
+Runner 的其它差别见[在自己的机器上跑线程（Runner）](/guide/environments/runner/)。
+
+## 放行全自动线程
+
+触发规则、定时这类无人值守入口建出来的全自动线程，只能用勾了「允许全自动线程使用」的主机。项目级定时的运行前闸门放在 SSH 主机上时，该主机同样须允许全自动线程使用。
+
+```bash
+oryn ssh set prod-web --allow-automation
+```
+
+## 测试连接、查看状态与打开终端
+
+主机行的操作：
+
+- 「测试」：测试连接并采一次负载、CPU、内存与磁盘快照。命令行 `oryn ssh test <名称>`，失败时退出码 1。
+- 「终端」：在浏览器里打开该主机的网页终端。同时打开的终端最多 8 个。
+- 「文件」：浏览远端文件。
+
+主机首次成功连接时固定目标机的主机公钥（指纹）。目标机重装或换密钥后，连接会被拒绝并提示指纹变了；确认无误后在主机行选「重置指纹」，下次成功连接时重新固定：
+
+```bash
+oryn ssh reset-host-key <名称>
+```
+
+## 查看审计
+
+网关上的每次连接与命令、设置页的测试 / 终端 / 文件操作、Agent 的 `ssh_exec_many` 都记一行审计。命令原文最多记 4096 字节，交互式会话不录内容。审计保留 30 天，在「SSH 主机」设置页的「网关审计」里查看，或：
+
+```bash
+oryn ssh audit --host prod-web
+oryn ssh audit --thread <线程 id>
+```
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 主机名 | 最长 64 字符 |
+| 标签 | 每台最多 16 个 |
+| 跳板链 | 最多 5 级 |
+| 同时打开的网页终端 | 最多 8 个 |
+| 审计中的命令原文 | 最多 4096 字节 |
+| 审计保留 | 30 天 |
+
+## 相关
+
+- [定时任务](/guide/automation/schedules/)：运行前闸门可以在 SSH 主机上执行。
+- [在自己的机器上跑线程（Runner）](/guide/environments/runner/)
+- [备份](/admin/operations/backup/)：网关主机密钥 `ssh-gateway.key` 随数据目录备份。
+- [`oryn ssh` 命令参考](/reference/cli/ssh/)
