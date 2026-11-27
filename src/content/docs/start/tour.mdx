@@ -1,0 +1,113 @@
+---
+title: 界面导览
+description: Oryn Web 界面的侧栏分区、线程页三栏、右面板页签、命令面板与设置入口，以及窄屏下的布局差别。
+type: explanation
+sources:
+  - file: README.md
+    section: '## 工作台'
+  - file: docs/features.md
+    section: '### 工程面板'
+  - file: docs/features.md
+    section: '### 收件箱与命令面板'
+  - file: web/src/components/layout/Sidebar.tsx
+  - file: web/src/components/layout/SectionTabBar.tsx
+  - file: web/src/components/layout/ThreadsPane.tsx
+  - file: web/src/components/layout/AssistantPane.tsx
+  - file: web/src/components/layout/ProjectsPane.tsx
+  - file: web/src/components/layout/MorePane.tsx
+  - file: web/src/components/layout/more-entries.ts
+  - file: web/src/components/layout/AppShell.tsx
+  - file: web/src/components/layout/SinkLayout.tsx
+  - file: web/src/lib/sections.ts
+  - file: web/src/lib/shortcuts.ts
+  - file: web/src/lib/orb-features.ts
+  - file: web/src/App.tsx
+  - file: web/src/state/ui.ts
+  - file: web/src/components/thread/RightPanel.tsx
+  - file: web/src/components/thread/ThreadHeader.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 5
+---
+
+import Shot from '@/components/Shot.astro';
+
+*本页回答：界面的每个区域是干什么的，要找的东西在哪里？*
+
+<Shot id="readme/workbench" alt="宽屏线程页的三栏：左侧侧栏是收件箱、需要你、空间、已置顶与按项目分组的线程，底部是线程、全局助手、项目、更多四个分区；中间是转录与输入框；右侧是信息面板，显示环境状态、CPU、内存、上下文、待办与服务、环境、浏览器 Profile、能力、SSH 主机入口行。" />
+
+宽屏下的线程页分三栏：左边是按项目组织的线程树，中间是对话，右边是这台环境的一切，包括资源曲线、上下文构成、待办、Git 改动、文件、终端、Portal、远程桌面与 Artifacts。
+
+## 侧栏
+
+侧栏顶部一行是通知铃、「收起侧边栏」与「新建线程」（`+`）。其下的「搜索」入口打开命令面板。中间是当前分区的内容，底部的底栏切换四个分区：「线程」「全局助手」「项目」「更多」。当前分区完全由地址决定；每个分区记住你最近停留的页面，切回来时回到那里。
+
+| 分区 | 内容 |
+|---|---|
+| 线程 | 「收件箱」入口；之后依次是「需要你」「空间」「已置顶」、按项目分组的活跃线程、「72 小时未活动」（可「全部归档」）、「稍后提醒」与「已归档」。「需要你」汇总等待输入或出错的线程，空时不显示 |
+| 全局助手 | 最上面是置顶的主线，其下是「助手的电脑」与「新对话」，再往下是助手的对话列表和「已归档」 |
+| 项目 | 首行「总览」，行尾的 `+` 新建项目；其后每个未归档项目一行，显示名称、线程数与最近活跃时间 |
+| 更多 | 连接断开时出现的连接状态行、「切换明暗」，然后是五个入口：「设置」，以及「概览」组里的「统计」「Artifacts」「Boxes」「Provider 总览」 |
+
+全局助手与 Space 的协调对话不出现在「线程」分区；助手对话在「全局助手」分区。
+
+## 线程页
+
+线程页的页头从左到右是项目、标题与状态胶囊（公开、定时、orb），右侧是「会话树」「信息面板」开关与「更多操作」（`⋯`）菜单，置顶、稍后提醒、定时、归档、改名、标签与颜色都在这个菜单里。中间是转录，底部是输入框。
+
+右面板随「信息面板」开关打开或关闭，宽度可以拖动调整；除「信息」页签外，其余页签可以用「面板最大化」占满内容区。
+
+## 右面板的页签
+
+右面板最多有七个页签，部分页签只在满足条件时出现：
+
+| 页签 | 内容 | 何时出现 |
+|---|---|---|
+| 信息 | 环境卡（状态、CPU、内存与上下文）；服务、环境、浏览器 Profile、能力与 SSH 主机的入口行；待办、子 Agent 派发树与后台任务 | 总是 |
+| 改动 | 实时 diff、暂存与取消暂存、推送并开 PR | 普通环境总是出现；Runner 线程要求 Runner 声明 `git` 特性 |
+| 文件 | 文件树、编辑器与浏览器内预览 | 普通环境总是出现；Runner 线程要求 `fs` 特性 |
+| 终端 | Web 终端 | 普通环境总是出现；Runner 线程要求 `terminal` 特性 |
+| Artifacts | 本线程产出的 artifact | 线程有 artifact，或你刚从转录里的卡片打开了一个 |
+| Portal | 经泛域名访问环境里的开发服务器 | 环境有 Portal 服务 |
+| 桌面 | 远程桌面与任务栏 | 环境有桌面 |
+
+页签上的小点提示有事待看：「改动」有未查看的新改动，「终端」有终端在等待输入，「桌面」的浏览器 Profile 需要你处理，「Artifacts」有新版本。各页签的用法见[信息面板](/guide/workbench/info-panel/)及同组其它页面。
+
+## 命令面板
+
+按 <kbd>Ctrl/⌘</kbd>+<kbd>K</kbd>，或点侧栏的「搜索」，打开命令面板。它可以跳转到线程、项目、Space、Artifacts、设置与常用操作，并对全部对话正文做全文搜索，命中后直接定位到那条消息。详见[命令面板与全文搜索](/guide/threads/search/)。
+
+其它应用级快捷键：
+
+| 按键 | 作用 |
+|---|---|
+| <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd> | 新建线程 |
+| <kbd>Ctrl/⌘</kbd>+<kbd>B</kbd> | 开关侧栏（焦点在输入框里时不生效） |
+| <kbd>Ctrl/⌘</kbd>+<kbd>1</kbd> – <kbd>4</kbd> | 切换到第 1–4 个分区 |
+| <kbd>Ctrl/⌘</kbd>+<kbd>/</kbd> | 进入全局助手分区 |
+
+完整列表见[键盘快捷键](/reference/ui/shortcuts/)。
+
+## 设置在哪里
+
+全局设置在侧栏「更多」分区的「设置」，地址是 `/settings`，各分区的导航在设置页里。项目自己的设置从项目主页页头的「项目设置」进入。全部分区见[设置页索引](/reference/ui/settings/)。
+
+## 窄屏布局
+
+界面按窗口宽度分三档：
+
+| 宽度 | 侧栏 | 右面板 |
+|---|---|---|
+| 840 px 及以上 | 常驻，可收起 | 在转录右侧作为第三栏 |
+| 600–839 px | 可折叠，推入显示 | 与转录并列为同级标签，标签条显示在页头下方 |
+| 600 px 以下（手机） | 下沉式：侧栏常驻底层，内容卡片右移露出它 | 与转录并列为同级标签，从页头右上角的视图菜单切换 |
+
+窄屏下转录本身是「对话」标签，与「改动」「文件」「终端」等面板标签并列，「信息」排在最后。手机上在内容卡片上向右滑动打开侧栏，<kbd>Esc</kbd> 或返回键关闭；面板页头左侧的「返回对话」回到转录。
+
+## 相关
+
+- [核心概念](/start/concepts/)
+- [第一个线程](/start/first-thread/)
+- [收件箱：处理等你的事](/guide/threads/inbox/)
+- [键盘快捷键](/reference/ui/shortcuts/)

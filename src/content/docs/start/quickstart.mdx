@@ -1,0 +1,122 @@
+---
+title: 快速开始：在本机跑起来
+description: 从源码构建 Oryn，在本机启动控制面与 Docker Provider，并在浏览器里开出第一个线程。
+type: tutorial
+sources:
+  - file: README.md
+    section: '## 快速开始'
+  - file: docs/deploy.md
+    section: '## 1. 安装二进制与镜像'
+  - file: docs/deploy.md
+    section: '## 4. 启动控制面并初始化'
+  - file: cmd/oryn/login.go
+  - file: web/src/components/transcript/WorkingFooter.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 3
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+完成后你会得到：一个在本机 `http://localhost:7600` 上运行的控制面、一个名为 `local` 的 Docker Provider，以及一个在独立 Docker 环境里启动的线程。本页只覆盖这一种本机试用方式；在服务器上部署见[部署总览](/admin/overview/)。
+
+## 开始之前
+
+- 一台装有 Docker 的 Linux 主机，Docker 网桥为 `docker0`（下面的命令从它取监听地址）。
+- Go `1.27+` 与 Bun `1.4+`。
+- git 2.31 或更高版本。控制面的项目仓库镜像与仓库浏览用它；版本不够时控制面照常启动，但仓库浏览停用。
+- Docker 数据盘留出足够空间：开发镜像 `oryn-orb:dev` 解压后约 10.2 GB。
+- 本机已有 omp 配置目录 `~/.omp/agent`，里面配好了你要用的模型。第 3 步会把它上传到控制面，其中明文的 API Key 会自动转入控制面的加密密钥库。
+- 一个支持 Passkey 的浏览器。
+
+取得 Oryn 源码并进入仓库根目录。本页所有命令都在 Oryn 仓库的根目录下执行；命令生成的配置与数据放在仓库的 `.dev/` 目录里，该目录已被 git 忽略。
+
+```bash
+git clone https://github.com/Lynricsy/Oryn.git
+cd Oryn
+```
+
+<Steps>
+
+1. **构建二进制与开发镜像**
+
+   ```bash
+   # 构建前端并编译四个静态链接二进制（bin/orynd、bin/orbd、bin/oryn、bin/fakeomp）
+   make web
+   make build
+
+   # 拉取钉定版本（core/source.json）的 Oryn Core，构建本机开发镜像 oryn-orb:dev
+   scripts/fetch-core.sh
+   make image
+   ```
+
+   `make image` 结束时会在断网容器里以非 root 用户跑冒烟测试，并输出：
+
+   ```text
+   orb 镜像离线冒烟：通过
+   ```
+
+2. **启动控制面并注册 Passkey**
+
+   ```bash
+   # 生成纯 Docker 本地配置（监听 docker0 网桥地址）并启动
+   mkdir -p .dev
+   DOCKER_IP=$(ip -4 -o addr show docker0 | awk '{print $4}' | cut -d/ -f1)
+   cat > .dev/quickstart-orynd.yaml <<EOF
+   listen: ["127.0.0.1:7600"]
+   public_url: "http://localhost:7600"
+   portal_domain: "localhost"
+   data_dir: "./.dev/quickstart-data"
+   orb_tls: { listen: ["${DOCKER_IP}:7643"] }
+   EOF
+   ./bin/orynd --config .dev/quickstart-orynd.yaml
+   ```
+
+   控制面在前台运行，让这个终端保持打开。首次启动时，日志里会打印一次性的 setup 链接：
+
+   ```text
+   http://localhost:7600/setup#token=ost_…
+   ```
+
+   在浏览器里打开这个链接，注册管理员 Passkey，并保存只显示一次的 10 个恢复码。注册完成后，你就是这套 Oryn 的所有者。
+
+3. **登录 CLI 并启动 Provider**
+
+   另开一个终端，同样进入 Oryn 仓库根目录：
+
+   ```bash
+   # 登录并上传本机 omp 配置，明文 API Key 自动转入控制面加密密钥库
+   ./bin/oryn login --url http://localhost:7600
+   ./bin/oryn config push ~/.omp/agent
+
+   # 创建名为 local 的 Provider 并启动 Docker 执行器
+   DOCKER_IP=$(ip -4 -o addr show docker0 | awk '{print $4}' | cut -d/ -f1)
+   ./bin/oryn provider create local > .dev/quickstart-provider.token
+   chmod 0600 .dev/quickstart-provider.token
+   cat > .dev/quickstart-provider.yaml <<EOF
+   url: "http://127.0.0.1:7600"
+   token_file: ".dev/quickstart-provider.token"
+   orb_url: "https://${DOCKER_IP}:7643"
+   driver: docker
+   docker:
+     image: "oryn-orb:dev"
+   EOF
+   ./bin/oryn provider run --config .dev/quickstart-provider.yaml
+   ```
+
+   `oryn login` 会打印网页批准地址与配对码。在刚才注册 Passkey 的浏览器里批准后，CLI 自动取得设备令牌，写入 `~/.config/oryn/credentials.json`。`oryn provider create` 在标准输出只打印一次 Provider 令牌，上面的命令把它直接存进 `.dev/quickstart-provider.token`。最后的 `oryn provider run` 在前台运行，向控制面拉取任务；让这个终端也保持打开。
+
+4. **开出第一个线程**
+
+   在浏览器打开 `http://localhost:7600`。首屏标题是「要做点什么？」。在输入框里写一句任务，按 <kbd>Enter</kbd> 发送。
+
+   页面跳到新线程，转录末尾先显示「正在准备环境（…）…」，括号里是环境当前的状态；环境就绪后显示「正在启动 agent…」。线程在一台独立的 Docker 环境里启动，Agent 随后开始回复。
+
+</Steps>
+
+## 下一步
+
+- [第一个线程](/start/first-thread/)：绑定一个仓库，看 Agent 改代码、查看 diff、归档线程。
+- [界面导览](/start/tour/)：认识侧栏、线程页与右面板。
+- [部署总览](/admin/overview/)：在服务器上部署，包括反向代理、Portal 泛域名证书、网络隔离、Sysbox 与 Firecracker。

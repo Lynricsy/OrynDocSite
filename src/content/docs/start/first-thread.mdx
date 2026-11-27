@@ -1,0 +1,88 @@
+---
+title: 第一个线程
+description: 用一个公开仓库新建项目，让 Agent 改一处代码，在改动面板里查看 diff，然后归档线程。
+type: tutorial
+sources:
+  - file: docs/features.md
+    section: '### 项目'
+  - file: docs/features.md
+    section: '### 转录与工具卡'
+  - file: docs/features.md
+    section: '### 工程面板'
+  - file: docs/features.md
+    section: '### orb 跟随线程'
+  - file: web/src/i18n/locales/zh-CN.json
+  - file: web/src/pages/projects/ProjectEditor.tsx
+  - file: web/src/pages/projects/home/HeaderActions.tsx
+  - file: web/src/pages/HomePage.tsx
+  - file: web/src/components/transcript/WorkingFooter.tsx
+  - file: web/src/components/thread/ThreadHeader.tsx
+  - file: web/src/components/thread/RightPanel.tsx
+verified: 6fe0baf13191
+sidebar:
+  order: 4
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+完成后你会得到：一个绑定了公开仓库的项目，一个 Agent 在其中改过代码的线程；你会在改动面板里看过这次改动的 diff，并把线程归档。
+
+## 开始之前
+
+- 一套能用的 Oryn：控制面在运行，至少一个 Provider 在线，模型配置已上传。还没有的话，先完成[快速开始](/start/quickstart/)。
+- 浏览器已登录这套 Oryn。
+- 一个公开 Git 仓库的 `https://` 地址，以及它的默认分支名。本教程不推送任何改动。
+
+<Steps>
+
+1. **新建项目**
+
+   点侧栏底部的「项目」，再点「总览」一行末尾的 `+`，进入「新建项目」页。
+
+   - 「名称」：填一个项目名。
+   - 「仓库」：选「已有仓库」。
+   - 「仓库地址」：填公开仓库的 `https://` 地址。
+   - 「基线分支」：填仓库的默认分支名。
+
+   点「创建」。页面进入新项目的主页：描述与仓库行显示你填的仓库地址与基线分支，「最近线程」卡里显示「这个项目还没有线程。」，侧栏里多出这个项目的一行。
+
+2. **发出第一条消息**
+
+   在项目主页的页头点「新建线程」。页面回到首屏，标题是「要做点什么？」，输入框里的项目胶囊已经选好这个项目；执行位置保持默认的「新 orb」。
+
+   在输入框里写一个会改动文件的任务，例如：
+
+   ```text
+   阅读 README，在末尾补充一节本地运行步骤。
+   ```
+
+   按 <kbd>Enter</kbd> 或点输入框右下角的发送按钮。页面跳到新线程：转录末尾先显示「正在准备环境（…）…」，环境就绪后显示「正在启动 agent…」，然后 Agent 开始回复。
+
+3. **看工具卡**
+
+   Agent 每调用一次工具，转录里就出现一张工具卡。卡片头部写着这次调用的意图，右侧读数说明结局，例如编辑类调用的 `+N −M`。线程工作中时，最后一条回复里的当前一批工具调用默认展开，Agent 开始下一批或回合结束时自动收起；点卡片头部可以自己展开或收起，手动开合过的卡片以你的操作为准。
+
+   展开后，上半是输入，下半是输出。bash 卡默认显示伪代码视图：运行中正在执行的那一行行首标 `›`，失败的步骤标 ×；用卡片里的「伪代码 / 原始」切换可以看原始命令。
+
+   Agent 回合结束后，转录末尾不再显示「工作中…」。
+
+4. **在改动面板里看 diff**
+
+   点线程页头的「信息面板」按钮打开右面板，切到「改动」页签。有未查看的新改动时，这个页签上会亮一个小点。
+
+   面板按文件列出相对基线分支的改动，每个文件带状态（如「修改」「新增」）。点一个文件，面板显示它带语法高亮的 diff。「改动范围」可以在「全部改动」「仅未提交」与「单个提交」之间切换。
+
+5. **归档线程**
+
+   点线程页头的「更多操作」（`⋯`），选「归档」。线程移到侧栏「线程」分区的「已归档」分组里。
+
+   一个环境的线程全部归档后，环境在下一轮空闲评估（不超过 30 秒）时冻结。归档的线程不会删除环境：之后在同一菜单里点「取消归档」，可以接着在这台环境里工作。
+
+</Steps>
+
+## 下一步
+
+- [界面导览](/start/tour/)：认识侧栏、线程页与右面板的各个区域。
+- [输入框：发送、引导与排队](/guide/threads/composer/)：在回合进行中引导 Agent。
+- [查看改动、提交与开 PR](/guide/workbench/changes/)：暂存、推送并开 PR。
+- [环境配置：setup、resume、快照与预热](/guide/projects/environment/)：让项目的新线程跳过环境构建。
