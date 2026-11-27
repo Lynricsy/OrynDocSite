@@ -1,0 +1,102 @@
+---
+title: .oryn/setup 与 .oryn/resume
+description: 环境生命周期脚本的查找顺序、运行时机、工作目录、超时、失败语义与日志位置。
+type: reference
+sources:
+  - file: internal/orbdrt/setup.go
+  - file: internal/orbdrt/runtime.go
+  - file: docs/features.md
+    section: '### 环境自配置'
+  - file: docs/deploy.md
+    section: '### 项目快照'
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 1
+---
+
+两个脚本声明项目的开发环境：`setup` 在新的执行环境（orb）里构建一次，`resume` 在环境每次唤醒时恢复运行状态。用法见[环境配置](/guide/projects/environment/)。
+
+## 查找顺序
+
+每个阶段按下表顺序依次执行找到的脚本，两处都有时两个都运行：
+
+| 顺序 | setup 阶段 | resume 阶段 |
+|---|---|---|
+| 1 | 项目设置「环境」分组里保存的 setup 脚本 | 项目设置「环境」分组里保存的 resume 脚本 |
+| 2 | 仓库里的 `.oryn/setup`；不存在时回退 `.agents/setup` | 仓库里的 `.oryn/resume`；不存在时回退 `.agents/resume` |
+
+- 仓库脚本相对工作目录查找，必须是普通文件并带可执行位，否则视为不存在。
+- 项目脚本先写到环境里的 `~/.cache/oryn/project-setup.sh` 或 `~/.cache/oryn/project-resume.sh`：以 `#!` 开头时直接执行，否则用 `bash` 执行。
+- 前一个脚本失败，后面的脚本不再执行。
+- 每个脚本都在登录 shell 的环境下运行：前一个脚本写进 profile 的 `PATH` 等设置，对后面的脚本可见。
+- 两处都没有脚本时，日志记一行 `no setup script (project settings, .oryn/setup or .agents/setup)`（resume 阶段同理）。
+
+## 工作目录
+
+| 情况 | 工作目录 |
+|---|---|
+| 控制面指定了工作目录 | 该目录 |
+| 项目有仓库 | `~/workspace/repo` |
+| 其它 | `~/workspace` |
+
+## 运行时机
+
+| 阶段 | 何时运行 |
+|---|---|
+| setup | 新环境首次创建时。之前先克隆仓库（工作目录里还没有检出时），再用 `git lfs pull` 取 Git LFS 对象（仓库里有 LFS 文件时） |
+| setup 跳过 | 完成标记 `~/.oryn/setup.done` 已存在时，日志记 `setup already done; skipped` |
+| setup 重跑 | 从项目快照启动、基线 `HEAD` 有变化时，删除完成标记，在快照的环境上把 setup 增量重跑一遍；所以 setup 脚本要能重复执行 |
+| resume | setup 阶段结束后接着运行一次；之后环境每次从冻结中唤醒时运行。从快照启动且基线 `HEAD` 没变时，跳过 setup，只运行 resume |
+| 手动 | 环境内运行 `oryn orb setup run`（重跑 setup）或 `oryn orb setup run --resume`（重跑 resume），输出实时打印；见 [`oryn orb`](/reference/cli/orb/) |
+
+setup 与 resume 结束后（脚本失败也一样），受管服务按 [`.oryn/services.yaml`](/reference/project-files/services-yaml/) 启动。
+
+带 Docker 的环境类型（Sysbox）在运行脚本之前先等环境内的 `dockerd` 就绪；没有就绪时该阶段以明确的错误失败，不运行脚本。
+
+## 超时
+
+| 项 | 上限 | 到达上限时 |
+|---|---|---|
+| setup 阶段的全部脚本 | 合计 20 分钟 | 结束脚本所在的整个进程组，setup 记为失败 |
+| 克隆仓库、`git lfs pull` | 各 20 分钟 | 记为失败 |
+| 等待 resume 脚本 | 10 秒 | 不中断脚本，余下部分转入后台继续运行，日志记 `resume still running; continuing in background` |
+| resume 脚本总时长（含后台部分） | 10 分钟 | 结束脚本所在的整个进程组，resume 记为失败 |
+| 等待 `dockerd` 就绪 | 2 分钟 | 该阶段失败，不运行脚本 |
+
+手动执行 `oryn orb setup run --resume` 时等到 resume 结束，不受 10 秒等待的影响。
+
+## 失败语义
+
+| 情况 | 结果 |
+|---|---|
+| setup 脚本退出非 0 或超时 | 不阻止环境就绪，Agent 照常启动；不写完成标记，下一次 setup 重跑；工作台顶部显示诊断条，可以查看日志，或交给当前线程的 Agent（内置 `oryn-setup` 技能）修复 |
+| Git LFS 对象取不下（对象不存在、凭据被拒、环境里没有 `git-lfs`） | setup 记为失败，线程里出现「环境 setup 失败」；setup 脚本照常运行；没取到的文件仍是指针文本，修好原因后在仓库根运行 `git lfs pull` |
+| resume 脚本退出非 0 或超时 | resume 记为失败；受管服务照常启动 |
+
+## 日志
+
+| 文件 | 内容 |
+|---|---|
+| `~/.cache/oryn/logs/setup.log` | setup 阶段的输出，追加写入 |
+| `~/.cache/oryn/logs/resume.log` | resume 阶段的输出，追加写入 |
+
+由环境守护进程写入的行以 `[orbd] ` 开头。在环境里查看：
+
+```bash
+# 最近一次 setup / resume 的结果
+oryn orb setup status
+# setup 日志末尾 200 行；加 --resume 看 resume 日志，-n 0 看全部
+oryn orb setup logs
+```
+
+## 影响项目快照的文件
+
+新的基线改动了下列任一文件（内容、可执行位、符号链接目标任一变化都算）时，旧快照直接退役，下一个环境从基础镜像全新 setup：
+
+- `.oryn/setup`
+- `.agents/setup`
+- `.oryn/services.yaml`
+- `.amp/services.yaml`
+
+其它让快照失效的条件见[快照与预热池](/admin/backends/snapshots-pool/)。

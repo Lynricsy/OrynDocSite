@@ -1,0 +1,72 @@
+---
+title: 环境变量
+description: oryn 与 orbd 读取的环境变量，以及环境内进程与 box 应用能读到的环境变量。
+type: reference
+sources:
+  - file: cmd/oryn/client.go
+  - file: cmd/oryn/orb_thread.go
+  - file: cmd/oryn/orb_setup.go
+  - file: cmd/oryn/schedule.go
+  - file: cmd/oryn/stats.go
+  - file: cmd/oryn/boxes_deploy.go
+  - file: cmd/orbd/main.go
+  - file: internal/orbdrt/runtime.go
+  - file: internal/orbdrt/runner.go
+  - file: internal/orbdrt/corefetch.go
+  - file: internal/orbdrt/agent.go
+  - file: internal/orbdrt/services.go
+  - file: internal/orbdrt/servicefile.go
+  - file: internal/orbdrt/boxapps.go
+  - file: internal/boxes/deploy.go
+  - file: internal/boxes/apps.go
+verified: 6fe0baf13191
+sidebar:
+  order: 50
+---
+
+## oryn 读取的变量
+
+| 变量 | 作用 | 未设置时 |
+|---|---|---|
+| `ORYN_API_URL` | 控制面地址。与 `ORYN_API_TOKEN` 都不为空时，`oryn` 直接用这两个值，不读凭据文件 | 读凭据文件 |
+| `ORYN_API_TOKEN` | 访问控制面的令牌，与 `ORYN_API_URL` 配合使用。不为空时，即使在执行环境（orb）内，`oryn` 也走控制面 REST API，不走 orbd 控制口 | 读凭据文件；在环境内走 orbd 控制口 |
+| `ORYN_CREDENTIALS` | 凭据文件路径；`oryn login` 写入这里，其它命令从这里读取 | 用户配置目录下的 `oryn/credentials.json`（Linux 上缺省为 `~/.config/oryn/credentials.json`） |
+| `ORYN_ORB` | 为 `1` 且 `ORYN_API_TOKEN` 为空时，`oryn` 按环境内处理；`oryn orb setup`、`oryn orb service`、`oryn orb desktop` 要求它为 `1` | 按环境外处理 |
+| `ORYN_THREAD_ID` | 环境内命令的调用方线程 | 环境内需要调用方线程的命令报调用错误 |
+| `TZ` | `oryn schedule` 与 `oryn stats` 的 `--tz` 缺省值（IANA 时区名）。以 `:` 开头的值不使用；`oryn stats` 还不使用以 `/` 开头的值 | `oryn schedule` 按 UTC 并在 stderr 提示；`oryn stats` 先取 `/etc/localtime`，再按 UTC |
+
+在环境内，`ORYN_ORB` 与 `ORYN_THREAD_ID` 由 orbd 设置，你不需要手动设置。运行位置的判定见[命令行总览](/reference/cli/)。
+
+## orbd 读取的变量（Runner）
+
+在自己的机器上以 `orbd run --runner` 运行 Runner 时，你会设置下列变量。环境形态的 `orbd` 由 Provider 设置变量，见 [orbd](/reference/cli/orbd/)。
+
+| 变量 | 作用 | 未设置时 |
+|---|---|---|
+| `ORYN_URL` | 控制面地址，如 `https://oryn.example.com` | 拒绝启动 |
+| `ORYN_RUNNER_TOKEN` | Runner 令牌，必须以 `ort_` 开头 | 读 `--token-file` 指定的文件，缺省 `$HOME/.config/oryn/runner.token`；读不到时拒绝启动 |
+| `ORYN_CORE_BASE_URL` | Oryn Core 的下载根（镜像）。请求地址为 `<下载根>/<tag>/omp-<os>-<arch>` | 从 Oryn Core 的 GitHub Release 下载 |
+| `ORYN_EGRESS_ADDR` | 出站通道的监听地址，必须是带端口的回环地址（`127.0.0.0/8` 或 `[::1]`）。下发给 Agent 的 `models.yml` 随之改写到这个地址 | `127.0.0.1:7811`；端口被占用时启动失败 |
+| `ORYN_ORB_CA_PEM` | link 的 TLS CA（PEM）。非空时，对 `ORYN_URL` 的 HTTPS 请求只信任这张 CA；只含空白视同未设置 | 使用系统根证书 |
+| `ORYN_LOG_LEVEL` | 日志级别：`debug`、`warn`、`error` | info |
+
+## 环境内与应用进程里的变量
+
+| 变量 | 出现在 | 值 |
+|---|---|---|
+| `ORYN_ORB` | 环境内由 orbd 启动的进程（Agent、setup 脚本、受管服务） | `1`。Runner 上不设置 |
+| `ORYN_ORB_ID` | 同上 | 环境 id。Runner 上不设置 |
+| `ORYN_RUNNER` | Runner 上由 orbd 启动的进程 | `1` |
+| `ORYN_THREAD_ID` | Agent 进程；受管服务 | Agent 进程里是所属线程的 id。受管服务里是服务所属线程的 id，服务没有所属线程时不设置 |
+| `PORT` | 受管服务；box 应用的服务进程 | 该服务的端口 |
+| `PUBLIC_URL` | 受管服务 | 该服务的 Portal 地址，不带结尾的 `/`。服务没有 Portal、控制面未配置 Portal 或线程没有短码时不设置 |
+| `DISPLAY` | 环境内由 orbd 启动的进程 | 桌面启用时为 `:1` |
+| `ORYN_DEPLOYMENT_URL` | box 应用的服务进程；`oryn boxes deploy` 运行 `.oryn/box.yaml` 里的 `build` 命令时 | 应用地址，不带结尾的 `/` |
+| `ORYN_DEPLOYMENT_NAME` | 同上 | 应用名 |
+| `ORYN_DEPLOYMENT_BOX` | 同上 | box 名 |
+| `ORYN_DEPLOYMENT_DATA_DIRECTORY` | box 应用的服务进程 | 应用数据目录 `~/apps/<应用名>/data`，展开为绝对路径 |
+
+- 环境内进程的环境里不含 `ORYN_ORB_TOKEN` 与 `ORYN_RUNNER_TOKEN`。
+- box 应用的服务进程只拿到基础环境（含上表的 `ORYN_ORB`、`ORYN_ORB_ID`）、应用的密钥与环境变量、`PORT` 和四个 `ORYN_DEPLOYMENT_*`，不含 setup 写入的环境、`PUBLIC_URL` 与 `ORYN_THREAD_ID`。
+- `.oryn/services.yaml` 的 `env` 里不能设置 `PORT`、`PUBLIC_URL`、`ORYN_THREAD_ID`；`env` 的值可以用 `${services.<服务名>.publicURL}` 引用其它服务的 `PUBLIC_URL`，算不出时替换为空串。见 [`.oryn/services.yaml`](/reference/project-files/services-yaml/)。
+- box 应用的密钥名不能是 `PORT` 或任一 `ORYN_DEPLOYMENT_*`。见[管理应用：密钥、回滚、日志与运行时段](/guide/boxes/manage-apps/)。

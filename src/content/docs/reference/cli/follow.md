@@ -9,6 +9,20 @@ sidebar:
 
 <!-- 由 scripts/gen-cli.ts 生成，勿手改；手写说明放 reference-data/cli-notes/ -->
 
+## 说明
+
+### 运行位置
+
+只在执行环境（orb）内可用：以当前线程（环境变量 `ORYN_THREAD_ID`）的名义登记跟进话题。在其它位置调用报调用错误。
+
+### 退出码
+
+0 成功；1 错误；2 调用错误。
+
+### 相关指南
+
+- [后台研究与跟进](/guide/assistant/research/)
+
 ## oryn follow
 
 ```text

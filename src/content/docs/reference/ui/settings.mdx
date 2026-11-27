@@ -1,0 +1,93 @@
+---
+title: 设置页索引
+description: 「设置」的 21 个分区与项目设置的 7 个分组：名称、地址、管什么、对应的指南。
+type: reference
+sources:
+  - file: web/src/pages/settings/registry.ts
+  - file: web/src/App.tsx
+  - file: web/src/pages/settings/SettingsNav.tsx
+  - file: web/src/pages/projects/settings/ProjectSettingsPage.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+  - file: docs/features.md
+    section: '### 项目'
+verified: 6fe0baf13191
+sidebar:
+  order: 3
+---
+
+设置页内导航、手机上的分组首页和命令面板使用同一份分区列表，顺序与下表一致。「搜索设置」按分区名称和分区内各项设置的叫法匹配，不区分大小写；下表「管什么」一列即取自这些叫法。
+
+## 设置分区
+
+地址都以 `/settings/` 开头，例如 `https://oryn.example.com/settings/secrets`。
+
+### 个人
+
+| 名称 | 地址 | 管什么 | 指南 |
+|---|---|---|---|
+| 账户与设备 | `/settings/account` | 头像、设备配对与吊销、退出登录、更换服务器、Passkey、恢复码 | [浏览器：登录、设备与外观](/guide/clients/web/) |
+| 外观 | `/settings/appearance` | 明暗主题、主题色、壁纸、图标、语言、布局与侧栏 | [浏览器：登录、设备与外观](/guide/clients/web/) |
+| 输入与快捷键 | `/settings/input` | 发送键、快捷键一览、消息预测、新对话默认对象、选区动作 | [输入框](/guide/threads/composer/)、[选区动作与右键菜单](/guide/threads/selection-actions/)、[键盘快捷键](/reference/ui/shortcuts/) |
+| 通知与预算 | `/settings/notifications` | 推送渠道（Telegram、Webhook、ntfy、Bark 等）、花费预算与告警 | [通知渠道](/guide/automation/notifications/)、[成本统计与预算](/guide/automation/stats/) |
+| 桌面应用 | `/settings/desktop` | 自动更新、托盘、全局快捷键、开机自启；只在桌面 App 里出现 | [桌面 App](/guide/clients/desktop/) |
+
+### 助手与 Agent
+
+| 名称 | 地址 | 管什么 | 指南 |
+|---|---|---|---|
+| 全局助手 | `/settings/assistant` | 助手的身份与头像、模型与思考档位、系统提示词、联网、MCP、后台研究、助手的电脑、助手记忆 | [认识全局助手](/guide/assistant/overview/)、[后台研究与跟进](/guide/assistant/research/) |
+| 模型与角色 | `/settings/agent-models` | 角色（role）与轮换顺序、头像、标签、默认身份、思考档位 | [模型角色与思考档位](/guide/agent/roles/) |
+| 子 agent | `/settings/agent-subagents` | 子 Agent 的启停与模型覆盖 | [子 Agent](/guide/agent/subagents/) |
+| 技能与指令 | `/settings/agent-instructions` | 技能、提示词与上下文文件（`AGENTS.md`、`RULES.md`、`SYSTEM.md`）、命令、规则 | [技能、规则与指令](/guide/agent/instructions/) |
+| 扩展与工具 | `/settings/agent-extensions` | 扩展、工具、hook | [扩展、工具与 MCP](/guide/agent/extensions-mcp/) |
+| 记忆 | `/settings/agent-memory` | Hindsight 记忆、嵌入与重排模型、导出 | [记忆](/guide/agent/memory/) |
+| 配置文件 | `/settings/agent-config` | `config.yml`、`models.yml`、`mcp.json` 等原始配置文件（高级） | [模型与密钥](/guide/agent/models-and-keys/) |
+
+### 工作区
+
+| 名称 | 地址 | 管什么 | 指南 |
+|---|---|---|---|
+| 自动化 | `/settings/automations` | 定时任务 | [定时任务](/guide/automation/schedules/) |
+| 算力 | `/settings/compute` | Provider、Runner、令牌、执行环境（orb）类型 | [在自己的机器上跑线程](/guide/environments/runner/)、[接入 Docker Provider](/admin/install/docker-provider/) |
+| 控制面 | `/settings/server` | 空闲冻结与停机、回收与保留期、磁盘、快照、镜像、各项上限 | [配置控制面](/admin/install/control-plane/) |
+| 密钥 | `/settings/secrets` | 全局密钥与环境变量 | [密钥与环境变量](/guide/projects/secrets/) |
+| SSH 主机 | `/settings/ssh` | SSH 主机、钥匙、审计 | [SSH 主机](/guide/automation/ssh-hosts/) |
+| Git 与 GitHub | `/settings/git` | Git 提交身份、GitHub OAuth、仓库、Webhook | [GitHub：仓库绑定、PR 与回流](/guide/automation/github/) |
+| 浏览器 Profile | `/settings/browser-profiles` | 保存登录态的浏览器 Profile | [浏览器 Profile](/guide/workbench/browser-profiles/) |
+
+### 其它
+
+| 名称 | 地址 | 管什么 | 指南 |
+|---|---|---|---|
+| 分享与 Artifacts | `/settings/sharing` | 公开分享链接、Artifacts 的自动发布与页面能力授权 | [公开分享线程](/guide/threads/sharing/)、[发布 Artifact 与页面能力](/guide/artifacts/publishing/) |
+| 关于 | `/settings/about` | 版本、协调宿主 | [协调宿主](/admin/components/coordinator/) |
+
+## 旧地址
+
+分区重排前的地址会重定向到新分区：
+
+| 旧地址 | 现在的分区 |
+|---|---|
+| `/settings/devices`、`/settings/identity` | 账户与设备 |
+| `/settings/agent-composer`、`/settings/selection-actions` | 输入与快捷键 |
+| `/settings/agent-roles` | 模型与角色 |
+| `/settings/agent-skills`、`/settings/agent-prompts`、`/settings/agent-commands` | 技能与指令 |
+| `/settings/agent-ssh` | SSH 主机 |
+| `/settings/providers`、`/settings/runners` | 算力 |
+| `/settings/git-identity`、`/settings/github` | Git 与 GitHub |
+| `/settings/shares`、`/settings/artifacts` | 分享与 Artifacts |
+| `/settings/projects` | 项目总览 `/projects` |
+
+## 项目设置
+
+地址是 `/projects/<项目 id>/settings/<分组>`。宽屏左边是分组导航、右边是内容；窄屏先显示分组列表，点进去看内容。
+
+| 名称 | 分组 | 管什么 | 指南 |
+|---|---|---|---|
+| 概览 | `overview` | 名称、图标、描述、仓库地址与基线分支、git 作者；「仓库镜像」卡（外部仓库）或「托管仓库」卡；「危险操作」里的归档 / 取消归档与删除项目 | [创建与管理项目](/guide/projects/manage/)、[托管仓库](/guide/projects/hosted-repo/) |
+| 环境 | `environment` | 默认模型供应商、环境类型、浏览器 Profile、浅克隆、setup 与 resume 脚本；最近一次环境 setup 的结果；「快照与预热」 | [环境配置](/guide/projects/environment/) |
+| Agent | `agent` | 项目级 Agent 配置与项目记忆开关 | [项目级 Agent 配置](/guide/agent/project-config/)、[记忆](/guide/agent/memory/) |
+| GitHub | `github` | 仓库绑定、事件回流、触发规则与推送门禁；仓库不在 GitHub 上时只给出改仓库地址的入口 | [GitHub：仓库绑定、PR 与回流](/guide/automation/github/)、[GitHub 自动化](/guide/automation/github-automation/) |
+| 定时任务 | `schedules` | 本项目的定时任务 | [定时任务](/guide/automation/schedules/) |
+| SSH 主机 | `ssh` | 限定到本项目的 SSH 主机 | [SSH 主机](/guide/automation/ssh-hosts/) |
+| 密钥与环境变量 | `secrets` | 只注入本项目环境的环境变量与 Git 令牌 | [密钥与环境变量](/guide/projects/secrets/) |

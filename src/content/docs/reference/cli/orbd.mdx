@@ -1,0 +1,122 @@
+---
+title: orbd
+description: 环境守护进程 orbd 的两种运行形态、参数、环境变量、校验规则、信号与退出码。
+type: reference
+sources:
+  - file: cmd/orbd/main.go
+  - file: cmd/orbd/guest_linux.go
+  - file: internal/orbdrt/runner.go
+  - file: internal/orbdrt/runtime.go
+  - file: internal/orbdrt/corefetch.go
+  - file: docs/deploy.md
+    section: '### orb 令牌'
+  - file: docs/deploy.md
+    section: '### dispatch 驱动的脚本契约（令牌轮换部分）'
+  - file: docs/deploy.md
+    section: '### 安全边界（先读）'
+  - file: docs/deploy.md
+    section: '### 建立与启动'
+verified: 6fe0baf13191
+sidebar:
+  order: 91
+---
+
+`orbd` 是执行环境（orb）里的守护进程：连接控制面、监督 Agent、复制会话条目。它有两种运行形态：
+
+| 形态 | 命令 | 谁来启动 |
+|---|---|---|
+| 环境形态 | `orbd run` | Provider 在环境里启动，环境变量由 Provider 设置 |
+| Runner 形态 | `orbd run --runner --dir <目录>` | 你在自己的机器上以普通用户启动，见[在自己的机器上跑线程（Runner）](/guide/environments/runner/) |
+
+在 Firecracker 环境里，`orbd` 还作为 init 进程运行（以 PID 1 且不带参数启动），这一形态由系统使用，不由你调用。
+
+## 用法
+
+不带参数运行时打印用法并以 2 退出：
+
+```text
+usage: orbd run [--runner --dir <path> … [--terminal] [--token-file <path>] [--allow-root]] | orbd --version
+```
+
+`orbd --version`（也接受 `-version` 与 `version`）打印 `orbd <版本>` 并以 0 退出。
+
+## orbd run 的参数
+
+| 参数 | 缺省值 | 说明 |
+|---|---|---|
+| `--runner` | 关 | 以 Runner 形态运行 |
+| `--dir` | — | 提供给线程的目录，可重复；只用于 Runner 形态，至少给一个 |
+| `--terminal` | 关 | 开启终端面板；只用于 Runner 形态 |
+| `--token-file` | `$HOME/.config/oryn/runner.token` | 未设置 `ORYN_RUNNER_TOKEN` 时读取 Runner 令牌的文件；只用于 Runner 形态 |
+| `--allow-root` | 关 | 允许 Runner 以 root 运行；只用于 Runner 形态 |
+
+参数也可以写成单横线形式。`orbd run -h` 的输出：
+
+```text
+Usage of orbd run:
+  -allow-root
+    	allow a runner to run as root (runner only)
+  -dir value
+    	directory served to threads (repeatable; runner only)
+  -runner
+    	run as a runner on this machine
+  -terminal
+    	enable the terminal panel (runner only)
+  -token-file string
+    	runner token file when ORYN_RUNNER_TOKEN is unset (default $HOME/.config/oryn/runner.token)
+orbd: flag: help requested
+```
+
+## 环境变量
+
+环境形态读取以下变量，由 Provider 设置：
+
+| 变量 | 说明 |
+|---|---|
+| `ORYN_URL` | 控制面地址，必填 |
+| `ORYN_ORB_ID` | 环境 id，必填 |
+| `ORYN_ORB_TOKEN` | 环境令牌（`oot_` 开头）。`$HOME/.oryn/orb-token` 存在且不为空时，`orbd` 每次拨号前优先读这个文件；两者都没有时启动失败 |
+| `ORYN_ORB_CA_PEM` | link 的 TLS CA（PEM）。非空时，对 `ORYN_URL` 的 HTTPS 请求只信任这张 CA，不使用系统根证书；为空且 `ORYN_URL` 为 `https` 时使用系统根证书 |
+| `ORYN_LOG_LEVEL` | 日志级别：`debug`、`warn`、`error`；其它值或未设置时为 info |
+
+Runner 形态读取的变量（`ORYN_URL`、`ORYN_RUNNER_TOKEN`、`ORYN_CORE_BASE_URL`、`ORYN_EGRESS_ADDR`、`ORYN_ORB_CA_PEM`、`ORYN_LOG_LEVEL`）见[环境变量](/reference/env-vars/)。
+
+`orbd` 启动的子进程（Agent、setup 脚本、受管服务）的环境里不含 `ORYN_ORB_TOKEN` 与 `ORYN_RUNNER_TOKEN`。
+
+## 校验规则
+
+| 条件 | 结果 | 退出码 |
+|---|---|---|
+| 不带 `--runner` 却给了其它参数 | 报 `<参数> requires --runner` | 2 |
+| `run` 之后有多余的位置参数 | 报 `unexpected argument` | 2 |
+| `--runner` 没有任何 `--dir`，或某个 `--dir` 为空 | 拒绝启动 | 2 |
+| 环境形态缺少 `ORYN_URL`、`ORYN_ORB_ID`，或既无 `ORYN_ORB_TOKEN` 也无 `$HOME/.oryn/orb-token` | 报 `missing environment: <变量>` | 2 |
+| Runner 形态缺少 `ORYN_URL` | 报 `missing environment: ORYN_URL` | 2 |
+| Runner 形态既无 `ORYN_RUNNER_TOKEN`，也读不到令牌文件 | 拒绝启动 | 2 |
+| Runner 令牌不以 `ort_` 开头 | 拒绝启动 | 2 |
+| Runner 以 root（有效 uid 为 0）运行且没有 `--allow-root` | 拒绝启动 | 2 |
+| 某个 `--dir` 不存在或不是目录 | 拒绝启动。各目录先解析符号链接成绝对路径并去重 | 1 |
+| 同一系统用户已有一个 Runner 在运行 | 拒绝启动。实例锁是 `$HOME/.oryn/orbd/runner.lock` | 1 |
+| `ORYN_EGRESS_ADDR` 不是带端口的回环地址（`127.0.0.0/8` 或 `[::1]`） | 拒绝启动 | 1 |
+| `ORYN_ORB_CA_PEM` 无法解析 | 拒绝启动 | 1 |
+| 控制面拒绝 Runner 令牌（未知或已吊销），或令牌不属于 Runner | 拒绝启动。启动时向控制面查询自己的环境 id，至多等 20 秒 | 1 |
+| Runner 形态下载或校验 Oryn Core 失败 | 拒绝启动，不回退到本机的 `omp`。下载总时限 10 分钟 | 1 |
+| Runner 的 `ORYN_URL` 是指向非回环主机的明文 `http://` | 只记一条告警，照常启动 | — |
+| 设置了 `ORYN_ORB_CA_PEM`，但 `ORYN_URL` 不是 `https` | 只记一条告警，link 保持不加密 | — |
+
+Runner 形态启动时把 Oryn Core 缓存在 `~/.oryn/core/<tag>/omp`：已缓存且 SHA-256 一致时直接使用，否则下载、校验后替换，并删除其它版本的目录。
+
+## 信号
+
+| 信号 | 行为 |
+|---|---|
+| SIGTERM、SIGINT | 优雅停止全部 Agent（宽限 20 秒）后退出，退出码 0。停止期间再收到一次 SIGTERM 或 SIGINT 时立即以 1 退出 |
+| SIGHUP | 立即丢弃并重建与控制面的连接。Provider 更换环境令牌后，先写入 `$HOME/.oryn/orb-token`，再向 `orbd` 发 SIGHUP |
+
+## 退出码
+
+| 退出码 | 含义 |
+|---|---|
+| 0 | `--version`；或收到 SIGTERM、SIGINT 后正常停止 |
+| 1 | 启动或运行中出错（见上面的校验规则）；停止期间收到第二个终止信号 |
+| 2 | 用法或配置错误：没有参数、未知命令、参数错误、缺少环境变量或令牌、Runner 以 root 运行 |

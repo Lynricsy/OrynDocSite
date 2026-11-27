@@ -1,0 +1,126 @@
+---
+title: orynd
+description: 控制面 orynd 的启动参数与本机管理子命令。
+type: reference
+sources:
+  - file: cmd/orynd/main.go
+  - file: cmd/orynd/admin.go
+  - file: cmd/orynd/coordinator_host.go
+  - file: internal/server/listen.go
+  - file: internal/auth/setup.go
+  - file: docs/deploy.md
+    section: '## 4. 启动控制面并初始化'
+  - file: docs/deploy.md
+    section: '### 排查'
+  - file: docs/deploy.md
+    section: '## 9. 统计分析（M10）'
+verified: 6fe0baf13191
+sidebar:
+  order: 90
+---
+
+`orynd` 是控制面进程。不带子命令时启动控制面；带子命令时执行一次本机管理操作后退出。部署步骤见[启动与初始化](/admin/install/first-start/)。
+
+## 用法
+
+```text
+orynd [--config <配置文件>] [--version]
+orynd [--config <配置文件>] <子命令> <子命令参数>
+```
+
+`--config` 必须写在子命令之前。参数解析在第一个非参数的词处停止，写在子命令之后的 `--config` 不会作为全局参数生效。
+
+## 全局参数
+
+| 参数 | 缺省值 | 说明 |
+|---|---|---|
+| `--config` | `/etc/oryn/orynd.yaml` | 配置文件路径 |
+| `--version` | — | 打印版本号并退出 |
+
+参数也可以写成单横线形式（`-config`、`-version`）。`orynd -h` 的输出：
+
+```text
+Usage of orynd:
+  -config string
+    	配置文件路径 (default "/etc/oryn/orynd.yaml")
+  -version
+    	打印版本号并退出
+orynd: flag: help requested
+```
+
+配置文件的全部键见 [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/)。每个子命令都先读取配置文件，再按其中的 `data_dir` 打开数据。
+
+## 启动控制面
+
+不带子命令运行时，`orynd` 读取配置并开始服务。收到 SIGINT 或 SIGTERM 后关闭监听，至多等 10 秒让进行中的请求结束，然后退出。首次启动没有所有者时，日志里打印 setup 链接，形如 `https://oryn.example.com/setup#token=ost_…`。
+
+## setup-token
+
+```bash
+sudo -u oryn orynd --config /etc/oryn/orynd.yaml setup-token
+```
+
+重新生成初始化令牌，在 stdout 打印 setup 链接。用于 setup 链接丢失的情况。已完成初始化时报错：
+
+```text
+已完成初始化；丢失 Passkey 请在 /login 使用恢复码
+```
+
+## admin
+
+本机管理命令。它们直接打开控制面使用的同一个 SQLite 库，可以在 `orynd` 运行时执行。
+
+### admin create-device
+
+```bash
+orynd --config /etc/oryn/orynd.yaml admin create-device --name <设备名>
+```
+
+新建一台设备，stdout 只输出设备令牌，便于 `TOKEN=$(orynd … admin create-device …)` 这样取用。
+
+| 参数 | 缺省值 | 说明 |
+|---|---|---|
+| `--name` | — | 设备名，必填 |
+| `--kind` | `cli` | 设备类型：`cli`、`desktop` 或 `mobile` |
+| `--platform` | 空 | 平台，如 `linux-x64` |
+
+### admin create-web-session
+
+```bash
+orynd --config /etc/oryn/orynd.yaml admin create-web-session
+```
+
+新建一个网页会话，stdout 只输出 Cookie `__Host-oryn_session` 的值，便于 `SESSION=$(orynd … admin create-web-session)` 这样取用。
+
+| 参数 | 缺省值 | 说明 |
+|---|---|---|
+| `--user-agent` | `orynd admin` | 记录在会话上的 User-Agent |
+
+### admin rebuild-stats
+
+```bash
+orynd --config /etc/oryn/orynd.yaml admin rebuild-stats
+```
+
+按线程当前的条目重算统计数据。不带参数时全量重算；给出 `--thread` 时只重算该线程。每个事务很短，靠 SQLite 的 `busy_timeout` 排队，可以在 `orynd` 运行时执行。完成后在 stdout 打印 `rebuilt <线程数> threads`。
+
+| 参数 | 缺省值 | 说明 |
+|---|---|---|
+| `--thread` | 空 | 只重算这个线程 |
+
+统计数据的保留期见[统计数据的保留与重算](/admin/operations/stats-retention/)。
+
+## coordinator check
+
+```bash
+sudo -u oryn orynd --config /etc/oryn/orynd.yaml coordinator check   # root 部署去掉 sudo -u oryn
+```
+
+检查协调宿主能否在本机运行，并对协调沙箱做一次自检。stdout 依次输出探测结论、沙箱报告与自检各项（每项一行 JSON）。全部通过时在 stderr 打印 `coordinator check: ok` 并以 0 退出；否则在 stderr 打印 `orynd: coordinator check: <原因>` 并以 1 退出。各检查项的含义见[协调宿主：启用全局助手与 Space](/admin/components/coordinator/)。
+
+## 退出码
+
+| 退出码 | 含义 |
+|---|---|
+| 0 | 成功；或控制面收到 SIGINT、SIGTERM 后在 10 秒内正常停止 |
+| 1 | 出错。stderr 打印 `orynd: <错误>`，包括配置文件无法读取或校验不通过、未知子命令、子命令参数错误、停止时 10 秒内未能关闭，以及 `-h` |

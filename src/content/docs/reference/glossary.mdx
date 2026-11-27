@@ -1,0 +1,101 @@
+---
+title: 术语表
+description: 本站使用的术语与一句话定义，以及各类令牌与标识的前缀。
+type: reference
+sources:
+  - file: docs/features.md
+  - file: README.md
+  - file: docs/protocol.md
+    section: '## 通用约定'
+  - file: schema/openapi.yaml
+  - file: docs/deploy.md
+    section: '## 4. 启动控制面并初始化'
+  - file: internal/auth/setup.go
+  - file: internal/schedule/webhook.go
+  - file: cmd/oryn/github.go
+verified: 6fe0baf13191
+sidebar:
+  order: 60
+---
+
+中文术语按拼音排序，英文术语按字母排序。执行环境（orb）在本站简称环境；界面、命令与配置键里保留的英文原词（如 `orb`）在对应条目里注明。
+
+## 中文术语
+
+| 术语 | 定义 | 详见 |
+|---|---|---|
+| 出站代理 | 控制面上的代理：环境里的模型与 Git 请求经它发出，由它按上游主机注入真实的 API Key 与令牌，并把响应里回显的凭据脱敏回占位符 | [凭据隔离与出站代理](/security/credentials/) |
+| 触发规则 | 按 GitHub 事件启动线程的规则，有分诊、PR 评审、发布哨兵三个预设 | [GitHub 自动化](/guide/automation/github-automation/) |
+| 定时任务 | 按 Cron 或固定间隔运行的任务：线程内定时在已有线程里触发，项目级定时每次拉起全新线程 | [定时任务](/guide/automation/schedules/) |
+| 冻结 | Agent 与用户空闲达到阈值后，环境自动暂停（暂停容器或 vCPU）；打开线程或访问受管服务时自动唤醒 | [环境如何随线程生灭](/guide/environments/lifecycle/) |
+| 发布哨兵 | 触发规则预设之一：发布提交的 CI 被阻塞时开线程修复，至多 5 轮 | [GitHub 自动化](/guide/automation/github-automation/) |
+| 分叉 | 从线程的某个条目分出一个新线程，新线程共用原环境（`share`）或从环境快照复制出一台副本（`copy`） | [回退、分叉与会话树](/guide/threads/rewind-fork/) |
+| 工作线程 | 在执行环境或 Runner 上运行 Agent、实际干活的线程；Space 协调者与全局助手派出的也是工作线程 | [Space](/guide/automation/spaces/) |
+| 规则 | Agent 配置里的一类条目，可放在全局或项目层；`/omfg` 能把你对错误做法的吐槽生成一条规则 | [技能、规则与指令](/guide/agent/instructions/) |
+| 后台研究 | 全局助手在你没问时自己查看新信息、值得说才在主线里说的功能，缺省关闭 | [后台研究与跟进](/guide/assistant/research/) |
+| 唤醒 | 让冻结或停机的环境恢复运行：冻结的环境在打开线程或访问受管服务时自动唤醒，停机的环境要发消息或手动唤醒 | [环境如何随线程生灭](/guide/environments/lifecycle/) |
+| 回退 | 把会话移回之前某条你发过的消息之前，原来的路径保留为分支；空输入框里连按两次 <kbd>Esc</kbd> 打开 | [回退、分叉与会话树](/guide/threads/rewind-fork/) |
+| 会话树 | 一个线程里全部分支组成的树，`/tree` 打开，可以跳转到历史分支 | [回退、分叉与会话树](/guide/threads/rewind-fork/) |
+| 技能 | Agent 配置里的一类条目，在「技能与指令」分区或项目级 Agent 配置里管理；全局助手的内置技能 `oryn` 收录它能执行的 Oryn 操作 | [技能、规则与指令](/guide/agent/instructions/) |
+| 角色（role） | 首屏与线程里可以切换的一组模型设置，轮换顺序在「模型与角色」里配置；Space 协调者派线程时也可以指定子 Agent 角色 | [模型角色与思考档位](/guide/agent/roles/) |
+| 控制面 | 服务端程序 `orynd`：提供 REST 与 WebSocket，管理 Passkey 与设备配对、调度、协调沙箱和出站代理，并内嵌 Web 前端 | [部署总览](/admin/overview/) |
+| 快照 | 项目首次 setup 成功后保存的环境磁盘；之后同一项目的新环境从它启动，跳过构建 | [环境配置](/guide/projects/environment/) |
+| 浏览器 Profile | 远程桌面里浏览器的登录态，可以跨线程复用，用读写锁控制占用 | [浏览器 Profile](/guide/workbench/browser-profiles/) |
+| 浏览器中继 | Chrome 扩展，让工作线程里的 Agent 操作你本机的 Chrome | [让 Agent 使用你本机的 Chrome](/guide/environments/browser-relay/) |
+| 门禁 | 项目可开启的推送 / 开 PR 检查：开启后推送或开 PR 前须先用 `github_prepare` 跑过检查，由出站代理强制执行 | [Git 访问范围与门禁](/security/git-scope/) |
+| 命令面板 | <kbd>Ctrl/⌘</kbd>+<kbd>K</kbd> 打开，跳转线程、项目、Space、Artifacts、设置与常用操作，并全文搜索对话正文 | [命令面板与全文搜索](/guide/threads/search/) |
+| 排队 | 回合进行中发出的消息等回合结束后再交给 Agent（follow_up） | [输入框](/guide/threads/composer/) |
+| 全局助手 | 运行在协调沙箱里的助手：能联网、能派线程、有自己的电脑；删除、公开分享与密钥类操作要你点确认卡 | [认识全局助手](/guide/assistant/overview/) |
+| 全自动线程 | 由触发规则、项目级定时或发布哨兵建立的线程；GitHub 只用 Agent 账号，SSH 只能用明确放行的主机 | [协调沙箱与不可信输入](/security/sandbox-untrusted/) |
+| 确认卡 | 全局助手要执行删除、公开分享或密钥类操作时在对话里出现的卡片；你确认后才执行，24 小时没人答就过期 | [认识全局助手](/guide/assistant/overview/) |
+| 入站 Webhook | 项目级定时任务的一个地址，外部系统 POST 一次就运行一次 | [入站 Webhook](/guide/automation/webhooks/) |
+| 设备令牌 | 一台已配对设备的 API 凭据，前缀 `odt_`，以 `Authorization: Bearer` 发送 | [令牌、设备与单向信任](/security/tokens-trust/) |
+| 视图 | Agent 在对话里给出的可交互界面（表单、按钮、表格、图表、HTML 小工具等），你的操作回到 Agent | [视图](/guide/artifacts/views/) |
+| 收件箱 | `/inbox` 分诊台，按紧急程度列出等你处理、出错、已完成未读与运行中的线程 | [收件箱](/guide/threads/inbox/) |
+| 受管服务 | 环境里由守护进程监督的长期进程，在 `.oryn/services.yaml` 里声明，或用 `oryn orb service start --command` 临时建立 | [受管服务与 Portal 预览](/guide/workbench/portal-services/) |
+| 思考档位 | 模型的推理强度，可以随角色设定，也可以在首屏直接指定 | [模型角色与思考档位](/guide/agent/roles/) |
+| 停机 | 冻结超时后环境转为停机，磁盘状态完整保留；唤醒要冷启动 | [环境如何随线程生灭](/guide/environments/lifecycle/) |
+| 托管仓库 | 由 Oryn 自己托管的 Git 仓库，用 `oryn clone` 克隆 | [托管仓库](/guide/projects/hosted-repo/) |
+| 文件库 | 全局助手的文件存放处：助手对话的附件、导出物、从环境或助手的电脑取回的文件都进这里 | [文件库](/guide/assistant/library/) |
+| 线程 | 一段与 Agent 的对话；每个线程运行在自己的执行环境里 | [新建线程与选择执行位置](/guide/threads/new-thread/) |
+| 项目 | 一个代码库及其设置（仓库、环境、Agent 配置、定时任务、SSH 主机、密钥与环境变量），线程可以属于项目 | [创建与管理项目](/guide/projects/manage/) |
+| 协调宿主 | 控制面内置的 `@host`，在严格沙箱中按需拉起全局助手与 Space 协调者的进程 | [协调宿主](/admin/components/coordinator/) |
+| 引导 | 回合进行中发出的消息直接交给正在工作的 Agent（steer） | [输入框](/guide/threads/composer/) |
+| 应用 | 运行在 box 上的程序（app），各有自己的地址、密钥与数据目录；一台 box 至多 16 个 | [认识 Boxes](/guide/boxes/overview/) |
+| 预热池 | 为项目保持 1–3 台已完成 setup、尚未绑定线程的环境，新线程直接认领 | [环境配置](/guide/projects/environment/) |
+| 闸门 | 定时任务每次运行前执行的检查命令；满足跳过条件时本次运行跳过，不启动 Agent、不调用模型 | [定时任务](/guide/automation/schedules/) |
+| 占位符 | 下发到环境的配置里代替真实密钥的字符串，形如 `oryn-ph-…`，由出站代理在请求时换成真实值 | [凭据隔离与出站代理](/security/credentials/) |
+| 执行环境 | 线程运行所在的隔离环境（Docker 容器、Sysbox 容器或 Firecracker microVM），随线程创建、冻结与删除；界面、命令与配置键里叫 `orb`，本站简称环境 | [环境如何随线程生灭](/guide/environments/lifecycle/) |
+| 主人记忆 | 全局助手关于你的长期记忆，存在 Hindsight 的 `oryn-owner` bank 里 | [主人记忆](/guide/assistant/owner-memory/) |
+| 主线 | 全局助手分区置顶的永久对话；定时与 GitHub 规则的结果、提醒和后台研究的发现汇到这里 | [主线](/guide/assistant/mainline/) |
+| 助手的电脑 | 属于全局助手的一台普通执行环境，主线与所有助手对话共用 | [助手的电脑](/guide/assistant/computer/) |
+| 子 Agent | Agent 派出去执行子任务的 Agent，在「子 agent」分区启停与覆盖模型 | [子 Agent](/guide/agent/subagents/) |
+
+## 英文术语
+
+| 术语 | 定义 | 详见 |
+|---|---|---|
+| Agent | 在线程里替你工作的模型进程；内核是 Oryn Core | [认识 Oryn](/start/what-is-oryn/) |
+| Agent 沙箱 | 线程里的 Agent 按需开的临时机器，与自己的环境平级，里面没有任何凭据，用完即焚 | [Agent 沙箱](/guide/environments/sandboxes/) |
+| Artifact | Agent 产出的页面、画布、文档、幻灯片或 Word / Excel / PowerPoint / PDF 文件，带版本历史，可以导出与发布；复数 Artifacts | [Artifacts 概览](/guide/artifacts/overview/) |
+| box、Boxes | box 是由 Provider 拉起的常驻机器，不空闲冻结、不随线程回收，用来运行应用；Boxes 是管理它们的功能 | [认识 Boxes](/guide/boxes/overview/) |
+| Hindsight | 自托管的记忆服务；同一项目的线程共享记忆，不同项目互不可见 | [记忆](/guide/agent/memory/) |
+| omp、Oryn Core | Agent 内核，fork 自 oh-my-pi；命令名为 `omp` | [认识 Oryn](/start/what-is-oryn/) |
+| Portal | 经泛域名把环境里受管服务的端口暴露给浏览器的入口，地址形如 `https://t-<短码>-p<端口>.<portal_domain>/` | [受管服务与 Portal 预览](/guide/workbench/portal-services/) |
+| Provider | 在宿主机上运行的执行器（`docker`、`firecracker`、脚本 `dispatch`），按控制面派发的任务创建与管理环境 | [选择执行后端](/guide/environments/backends/) |
+| Runner | 你自己机器上以普通用户运行的 `orbd run --runner`，把一个目录接入为线程的执行位置 | [在自己的机器上跑线程](/guide/environments/runner/) |
+| Space | 由协调者拆解目标、并发派出与检视工作线程的工作区 | [Space：并行协调多条线程](/guide/automation/spaces/) |
+
+## 标识前缀
+
+| 前缀 | 含义 | 详见 |
+|---|---|---|
+| `ost_` | 初始化令牌：控制面首次启动、还没有所有者时打印在 setup 链接里，用来注册第一个 Passkey | [启动与初始化](/admin/install/first-start/) |
+| `odt_` | 设备令牌，以 `Authorization: Bearer odt_…` 访问 REST API | [API 使用约定](/reference/api-guide/) |
+| `opv_` | Provider 令牌，用于 Provider 协议 | [接入 Docker Provider](/admin/install/docker-provider/) |
+| `oot_` | 环境令牌（orb 令牌）；每次创建、唤醒及拍摄快照后轮换 | [令牌、设备与单向信任](/security/tokens-trust/) |
+| `ort_` | Runner 令牌，只用于 `/orb/v1/link` 与 `/orb/v1/whoami` | [令牌、设备与单向信任](/security/tokens-trust/) |
+| `owh_` | 入站 Webhook 地址里的密钥；控制面只存它的 SHA-256 | [入站 Webhook](/guide/automation/webhooks/) |
+| `sch_` | 定时任务的 id | [定时任务](/guide/automation/schedules/) |
+| `ght_` | GitHub 触发规则的 id | [GitHub 自动化](/guide/automation/github-automation/) |
+| `oryn-ph-` | 下发到环境的密钥占位符 | [凭据隔离与出站代理](/security/credentials/) |

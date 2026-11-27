@@ -1,0 +1,80 @@
+---
+title: 键盘快捷键
+description: Web 界面的应用级快捷键，以及输入框在两种发送键设置下的按键。
+type: reference
+sources:
+  - file: web/src/lib/shortcuts.ts
+  - file: web/src/lib/composer.ts
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 1
+---
+
+「设置 → 输入与快捷键」里的「快捷键」一览与本页同源。表中的 <kbd>Ctrl/⌘</kbd> 在 macOS 与 iOS 上是 <kbd>⌘</kbd>，在其它平台上是 <kbd>Ctrl</kbd>，两者都能触发；macOS 上的 <kbd>Shift</kbd> 与 <kbd>Alt</kbd> 分别显示为 <kbd>⇧</kbd> 与 <kbd>⌥</kbd>。
+
+## 应用级
+
+| 按键 | 作用 | 生效范围 |
+|---|---|---|
+| <kbd>Ctrl/⌘</kbd>+<kbd>K</kbd> | 命令面板 | 任何页面 |
+| <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd> | 新对话 | 任何页面 |
+| <kbd>Ctrl/⌘</kbd>+<kbd>B</kbd> | 收起 / 展开侧边栏 | 任何页面，焦点不在输入框时 |
+| <kbd>Ctrl/⌘</kbd>+<kbd>/</kbd> | 全局助手 | 任何页面 |
+| <kbd>Ctrl/⌘</kbd>+<kbd>1</kbd> – <kbd>Ctrl/⌘</kbd>+<kbd>4</kbd> | 切换分区（线程 / 助手 / 项目 / 更多） | 任何页面 |
+| <kbd>Ctrl/⌘</kbd>+<kbd>P</kbd> | 下一个角色模型 | 线程页 |
+| <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> | 上一个角色模型 | 线程页 |
+
+数字键按物理键位判断。
+
+## 输入框
+
+输入框的按键随「设置 → 输入与快捷键」里的「发送键」变化。发送键只对当前设备生效，存在浏览器本地，不随账户同步；缺省是 <kbd>Enter</kbd> 发送。
+
+### Enter 发送（缺省）
+
+| 按键 | 作用 | 生效范围 |
+|---|---|---|
+| <kbd>Enter</kbd> | 发送 | 输入框 |
+| <kbd>Shift</kbd>+<kbd>Enter</kbd> | 换行 | 输入框 |
+| <kbd>Enter</kbd> | 引导正在进行的回合 | 输入框，回合进行中 |
+| <kbd>Ctrl/⌘</kbd>+<kbd>Enter</kbd> | 排队，回合结束后发送 | 输入框，回合进行中 |
+| <kbd>Alt</kbd>+<kbd>Enter</kbd> | 中断并发送 | 输入框，回合进行中 |
+| 连按两次 <kbd>Esc</kbd> | 中断回合 | 输入框，回合进行中 |
+| 连按两次 <kbd>Esc</kbd> | 回退到之前的消息 | 空输入框 |
+
+回合没有进行时，<kbd>Enter</kbd> 带上 <kbd>Ctrl/⌘</kbd> 或 <kbd>Alt</kbd> 也是发送。
+
+### Ctrl/⌘+Enter 发送
+
+| 按键 | 作用 | 生效范围 |
+|---|---|---|
+| <kbd>Ctrl/⌘</kbd>+<kbd>Enter</kbd> | 发送 | 输入框 |
+| <kbd>Enter</kbd> | 换行 | 输入框 |
+| <kbd>Ctrl/⌘</kbd>+<kbd>Enter</kbd> | 引导正在进行的回合 | 输入框，回合进行中 |
+| <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd> | 排队，回合结束后发送 | 输入框，回合进行中 |
+| <kbd>Ctrl/⌘</kbd>+<kbd>Alt</kbd>+<kbd>Enter</kbd> | 中断并发送 | 输入框，回合进行中 |
+| 连按两次 <kbd>Esc</kbd> | 中断回合 | 输入框，回合进行中 |
+| 连按两次 <kbd>Esc</kbd> | 回退到之前的消息 | 空输入框 |
+
+回合没有进行时，<kbd>Ctrl/⌘</kbd>+<kbd>Enter</kbd> 带上 <kbd>Shift</kbd> 或 <kbd>Alt</kbd> 也是发送；不带 <kbd>Ctrl/⌘</kbd> 的 <kbd>Enter</kbd>、<kbd>Shift</kbd>+<kbd>Enter</kbd>、<kbd>Alt</kbd>+<kbd>Enter</kbd> 都是换行。
+
+### 两种模式共同的规则
+
+| 规则 | 值 |
+|---|---|
+| 连按两次 <kbd>Esc</kbd> 的间隔 | 不超过 500 毫秒 |
+| 回合没有进行、输入框里有字时按 <kbd>Esc</kbd> | 不计入连按，草稿不受影响 |
+| 输入法组字期间的按键 | 不触发任何动作 |
+
+### 预测与引用菜单
+
+| 按键 | 作用 | 前提 |
+|---|---|---|
+| <kbd>Tab</kbd> 或 <kbd>→</kbd> | 插入灰字显示的下一条消息预测（不发送） | 已开启「预测我的下一条消息」 |
+| 插入后再按 <kbd>Tab</kbd> | 换下一条预测 | 已开启「提供多个候选」 |
+| <kbd>↑</kbd> <kbd>↓</kbd> | 选择 issue 或 PR | 键入 `#` 打开的「GitHub issue 与 PR」菜单 |
+| <kbd>Enter</kbd> | 作为附件加入 | 同上 |
+| <kbd>Esc</kbd> | 关闭菜单 | 同上 |
+
+输入框的用法见[输入框：发送、引导与排队](/guide/threads/composer/)，回退见[回退、分叉与会话树](/guide/threads/rewind-fork/)。

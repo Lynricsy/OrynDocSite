@@ -1,0 +1,46 @@
+---
+title: oryn-push-gateway
+description: 推送网关 oryn-push-gateway 的两个命令行参数与退出方式。
+type: reference
+sources:
+  - file: cmd/oryn-push-gateway/main.go
+  - file: internal/pushgw/config.go
+  - file: docs/push-gateway.md
+    section: '## 构建'
+  - file: docs/push-gateway.md
+    section: '## 自建网关'
+verified: 6fe0baf13191
+sidebar:
+  order: 92
+---
+
+`oryn-push-gateway` 把控制面发出的推送密文转给 APNs 与 FCM。只有自己编译 App（改了 bundle id、换了 Firebase 项目或 APNs 团队）时才需要自建，见[移动推送与自建推送网关](/admin/components/push-gateway/)。
+
+## 参数
+
+| 参数 | 缺省值 | 说明 |
+|---|---|---|
+| `-config` | `/etc/oryn-push-gateway/gateway.yaml` | 配置文件路径 |
+| `-version` | — | 打印版本号并退出 |
+
+参数也可以写成双横线形式（`--config`、`--version`）。除这两个参数外不接受任何位置参数，多出的参数报错 `多余的参数`。`oryn-push-gateway -h` 的输出：
+
+```text
+Usage of oryn-push-gateway:
+  -config string
+    	配置文件路径 (default "/etc/oryn-push-gateway/gateway.yaml")
+  -version
+    	打印版本号并退出
+oryn-push-gateway: flag: help requested
+```
+
+配置文件的全部键见 [`gateway.yaml` 配置参考](/reference/config/push-gateway-yaml/)。
+
+## 信号与退出码
+
+收到 SIGINT 或 SIGTERM 后，网关停止服务并退出。
+
+| 退出码 | 含义 |
+|---|---|
+| 0 | `-version`；或正常停止 |
+| 1 | 出错。stderr 打印 `oryn-push-gateway: <错误>`，包括配置文件无法读取或校验不通过、多余的参数，以及 `-h` |

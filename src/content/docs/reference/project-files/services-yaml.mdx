@@ -1,0 +1,133 @@
+---
+title: .oryn/services.yaml
+description: 受管服务定义文件的位置、字段、校验规则、注入的环境变量、就绪探测与重启策略。
+type: reference
+sources:
+  - file: internal/orbdrt/servicefile.go
+  - file: internal/orbdrt/services.go
+  - file: docs/protocol.md
+    section: '### 服务模型'
+verified: 6fe0baf13191
+sidebar:
+  order: 2
+---
+
+执行环境（orb）里的环境守护进程按这个文件拉起并监督长期运行的进程（受管服务），有 Portal 的服务可以从浏览器访问。用法见[受管服务与 Portal 预览](/guide/workbench/portal-services/)。
+
+## 文件位置
+
+| 顺序 | 路径（相对工作区根） |
+|---|---|
+| 1 | `.oryn/services.yaml` |
+| 2 | `.amp/services.yaml` |
+
+先存在的一份为准，两份不合并。
+
+## 结构
+
+顶层键 `services` 是从服务名到定义的映射，按文件顺序处理：
+
+```yaml
+services:
+  web:
+    command: bun run dev --port "$PORT"
+    cwd: app
+    health: /healthz
+    portal: true
+  api:
+    command: ./bin/api
+    port: 8080
+    env:
+      WEB_ORIGIN: ${services.web.publicURL}
+```
+
+- `services` 缺省或为空时没有文件服务。
+- `services` 不是映射、YAML 语法错误或文件读不出时，整份文件无效，已在运行的文件服务保持不变。
+- 单个服务的定义无效时，该服务以 `failed` 列出且不启动，其它服务不受影响。
+- 未知字段忽略（例如 `review`、`description`）。
+
+## 字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `command` | 字符串 | 是 | 用 `bash -lc` 执行；不能为空白 |
+| `cwd` | 字符串 | 否 | 进程的工作目录，相对工作区根；绝对路径或逃出工作区根的路径无效；缺省为工作区根 |
+| `port` | 整数 | 否 | 服务监听的端口，范围 1–65535；省略时在 20000–29999 中自动分配，分配结果跨重启不变 |
+| `env` | 映射 | 否 | 额外的环境变量；值里可以写 `${services.<服务名>.publicURL}` 引用另一个服务的 `PUBLIC_URL` |
+| `health` | 字符串 | 否 | 就绪探测的 HTTP 路径，以 `/` 开头，至多 512 字节 |
+| `portal` | 布尔、字符串或映射 | 否 | 为服务开 Portal：`true` 等于链接到 `/`、标题为服务名；字符串是链接路径；映射写 `url` 与 `title`（`url` 缺省 `/`，`title` 缺省服务名）；`false` 或省略表示不开 |
+| `portals` | 列表 | 否 | 额外的 Portal 链接，每项 `url`、`title`、可选 `folder`；也可以写成分组 `folder` 加 `links` 列表；`title` 缺省为路径 |
+| `platforms` | 字符串列表 | 否 | 给出且不含 `linux` 时跳过该服务 |
+
+`portal` 与 `portals` 里的链接是同一个服务端口上的不同路径，不是额外端口；一个服务只暴露它自己的 `PORT`。
+
+## 校验规则
+
+| 项 | 规则 |
+|---|---|
+| 服务名 | 匹配 `^[a-z0-9][a-z0-9-]{0,31}$` |
+| 含 `--` 的服务名 | 忽略：`--` 留给 box 上的应用 |
+| 重名 | 同一文件里重名的定义无效；文件服务与临时服务（`oryn orb service start --command` 建立）同名时，文件服务胜出，临时服务的定义被删除 |
+| `env` 键名 | 匹配 `^[A-Za-z_][A-Za-z0-9_]*$`；不能是 `PORT`、`PUBLIC_URL`、`ORYN_THREAD_ID` |
+| Portal 链接路径 | 以 `/` 开头且不以 `//` 开头，至多 512 字节；含 `://` 的绝对地址跳过并记一条警告 |
+| Portal 链接标题、分组名 | 至多 80 个字符 |
+| 显式端口 | 与环境守护进程保留的端口冲突时为 `forbidden_port`；与另一个服务或 box 应用的端口重复时为 `port_conflict` |
+| 自动分配 | 20000–29999 内没有空闲端口时，该服务无效 |
+
+临时服务（`oryn orb service start --command`）使用同一套校验。
+
+## 注入的环境变量
+
+服务进程的环境依次叠加：环境的基础环境、控制面在 setup 时下发的环境变量、`env` 字段（引用已替换），最后是下表三个变量：
+
+| 变量 | 值 |
+|---|---|
+| `PORT` | 服务实际使用的端口（显式写的或自动分配的） |
+| `ORYN_THREAD_ID` | 服务所属的线程 |
+| `PUBLIC_URL` | 服务的 Portal 地址，不带结尾 `/`；只在服务有 Portal 且控制面配置了 Portal 泛域名时设置 |
+
+进程拉起时还算不出 `PUBLIC_URL`，或 `env` 里引用的地址还算不出（被替换为空串）时，地址可用后服务会重启一次以取得新值。
+
+## 状态
+
+| 状态 | 含义 |
+|---|---|
+| `starting` | 已拉起，尚未通过就绪探测 |
+| `running` | 运行中 |
+| `unhealthy` | 60 秒内未就绪，继续每 5 秒探测一次 |
+| `backoff` | 进程已退出，等待重启 |
+| `stopped` | 已停止 |
+| `failed` | 定义无效、`port_conflict`、`forbidden_port`，或连续 5 次存活不足 60 秒 |
+
+## 就绪探测
+
+写了 `health`、开了 Portal 或显式写了 `port` 的服务要通过就绪探测才进入 `running`；三者都没有的服务拉起后直接进入 `running`。
+
+| 项 | 值 |
+|---|---|
+| 探测间隔 | 500 毫秒；进入 `unhealthy` 后放宽到 5 秒 |
+| 单次探测超时 | 2 秒 |
+| 探测地址 | 先 `127.0.0.1`，再 `[::1]` |
+| 写了 `health` | `GET` 该路径，返回 2xx 或 3xx 即通过（不跟随重定向） |
+| 没写 `health` | TCP 连通即通过 |
+| 标记 `unhealthy` | 60 秒仍未通过 |
+
+## 重启与停止
+
+| 项 | 值 |
+|---|---|
+| 重启等待 | 连续第 1–4 次短命退出后依次等待 1、2、4、8 秒；存活满 60 秒后退出的，等待 1 秒 |
+| 短命退出 | 存活不足 60 秒；存活满 60 秒的一次退出让计数清零 |
+| 放弃重启 | 连续第 5 次短命退出后不再重启，标记 `failed` |
+| 停止 | 先向进程组发 `SIGTERM`，10 秒后仍未退出发 `SIGKILL` |
+| 进程组 | 服务的主进程退出后，同一进程组里残留的后代进程一并结束 |
+
+## 文件与上限
+
+| 项 | 值 |
+|---|---|
+| 每个环境的服务数 | 至多 32 个（文件服务与临时服务合计） |
+| 服务日志 | `~/.cache/oryn/logs/services/<服务名>.log`；超过 10 MiB 时改名为 `.log.1`，只保留一份 |
+| 状态文件 | `~/.oryn/services/state.json`（端口分配、临时服务定义、已停止的服务） |
+
+环境内的管理命令见 [`oryn orb service`](/reference/cli/orb/)。

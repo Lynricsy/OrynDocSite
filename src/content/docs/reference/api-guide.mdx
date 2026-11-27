@@ -1,0 +1,88 @@
+---
+title: API 使用约定
+description: 调用 Oryn REST 与 WebSocket 接口前要知道的地址、鉴权、时间与错误格式、路径编码和规格文件位置。
+type: reference
+sources:
+  - file: docs/protocol.md
+    section: '## 通用约定'
+  - file: docs/protocol.md
+    section: '## 分区'
+  - file: docs/protocol.md
+    section: '## 相对计划的补充与偏差'
+  - file: schema/openapi.yaml
+verified: 6fe0baf13191
+sidebar:
+  order: 70
+---
+
+Oryn 的协议以仓库里的 [`schema/openapi.yaml`](https://github.com/Lynricsy/Oryn/blob/main/schema/openapi.yaml)（OpenAPI 3.0.3）为唯一来源。每个端点的参数与响应见 [API 端点](/reference/api/)，本页列出所有端点共用的约定。
+
+## 地址与分区
+
+| 分区 | 路径 | 调用方 | 鉴权 |
+|---|---|---|---|
+| 客户端 REST | `/api/v1/...` | Web、桌面与移动 App、`oryn` 命令行、你的脚本 | 网页会话 Cookie 或设备令牌 |
+| 客户端 WebSocket | `/api/v1/ws` | 同上 | 一次性票据（见下） |
+| Provider 协议 | `/provider/v1/...` | Provider 执行器 | Bearer `opv_…` |
+| orb link | `/orb/v1/link`（WebSocket + yamux）、`/orb/v1/whoami` | 执行环境（orb）与 Runner 里的守护进程 | Bearer `oot_…`（环境）或 `ort_…`（Runner） |
+| 健康检查 | `/healthz` | 任何人 | 无 |
+
+路径都挂在控制面的地址下，例如 `https://oryn.example.com/api/v1/threads`。规格里的服务器地址 `http://127.0.0.1:7600` 是控制面在本机的监听地址，生产环境位于反向代理之后。
+
+## 鉴权
+
+客户端 REST 接受两种凭据，任选其一：
+
+| 方式 | 写法 | 变更类请求（POST、PUT、PATCH、DELETE） |
+|---|---|---|
+| 网页会话 | Cookie `__Host-oryn_session`（`Path=/`、无 `Domain`；`HttpOnly`、`Secure`、`SameSite=Lax`；30 天滑动续期） | 必须另带请求头 `X-Oryn-CSRF: 1` |
+| 设备令牌 | `Authorization: Bearer odt_…` | 不需要 `X-Oryn-CSRF` |
+
+脚本里用设备令牌：
+
+```bash
+curl -H "Authorization: Bearer <设备令牌>" https://oryn.example.com/api/v1/threads
+```
+
+各类令牌的来历与轮换见[令牌、设备与单向信任](/security/tokens-trust/)，前缀一览见[术语表](/reference/glossary/)。
+
+## 数据格式
+
+| 项 | 约定 |
+|---|---|
+| 时间 | UTC 毫秒整数（`TimestampMs`） |
+| 错误 | JSON 对象 `{"code": "…", "message": "…"}`（`Error`）；每个操作都以 `default` 响应描述错误 |
+| 列表 | 包在一层对象里，例如 `{threads}`、`{orbs}` |
+| 部分更新（`ThreadPatch`、`ProjectPatch`） | 只修改请求里出现的字段；可选字符串传空串表示清除；`snoozedUntil` 传 `0` 表示清除 |
+| omp 的命令与帧 | `OmpFrame`（任意对象），控制面不解释其内容 |
+
+通用错误码包括 `unauthorized`、`forbidden`、`not_found`、`invalid_request`、`conflict`、`rate_limited`（429，带 `Retry-After` 头）与 `internal`；各功能另有专用错误码，完整列表见规格里 `Error.code` 的说明。
+
+## 路径参数里的 `/`
+
+路径参数里的 `/` 必须编码为 `%2F`。涉及的端点：
+
+- `/api/v1/agent-config/files/{path}`
+- `/api/v1/projects/{id}/agent-config/files/{path}`
+- `/api/v1/secrets/{name}`
+- `/api/v1/projects/{id}/secrets/{name}`
+
+例如读取 Agent 配置里的 `agents/reviewer.md`，路径写成 `/api/v1/agent-config/files/agents%2Freviewer.md`。
+
+## WebSocket
+
+| 步骤 | 请求 | 说明 |
+|---|---|---|
+| 1 | `POST /api/v1/ws-ticket` | 用 Cookie（加 `X-Oryn-CSRF: 1`）或设备令牌鉴权，返回 `{ticket, expiresIn}`；票据一次性，30 秒有效 |
+| 2 | `GET /api/v1/ws?ticket=<票据>` | 升级为 WebSocket，收发 JSON 文本消息 |
+
+- 客户端发出的消息见 `WsClientMessage`，服务端发出的消息见 `WsServerMessage`，两者都按 `type` 字段区分。
+- 订阅（`sub`）一个线程后，服务端先发 `thread.snapshot`，再分批发 `entries`（每批至多 200 个条目），之后转发实时 `frame`。
+- 待发数据超过 8 MiB 的慢消费者会被断开；客户端应重连，并以 `afterSeq` 补拉。
+
+## 规格文件
+
+| 项 | 位置 |
+|---|---|
+| OpenAPI 规格 | Oryn 仓库的 [`schema/openapi.yaml`](https://github.com/Lynricsy/Oryn/blob/main/schema/openapi.yaml) |
+| 按端点浏览 | [API 端点](/reference/api/) |

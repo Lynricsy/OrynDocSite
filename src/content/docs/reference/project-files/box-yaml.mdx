@@ -1,0 +1,87 @@
+---
+title: .oryn/box.yaml
+description: box 应用部署配置的查找方式、字段、校验规则，以及 CLI 维护的部署目标文件 .oryn/box-deploy.json。
+type: reference
+sources:
+  - file: internal/boxcfg/boxcfg.go
+  - file: cmd/oryn/boxes_deploy.go
+  - file: docs/features.md
+    section: '## Boxes'
+verified: 6fe0baf13191
+sidebar:
+  order: 3
+---
+
+`oryn boxes deploy` 按这个文件把仓库的 `HEAD` 提交构建成 release 送上 box。用法见[部署第一个应用](/guide/boxes/deploy-app/)。
+
+## 查找方式
+
+| 项 | 规则 |
+|---|---|
+| 文件名 | 目录里的 `.oryn/box.yaml`；不存在时读 `.amp/box.yaml` |
+| 查找范围 | 从当前目录向上逐级查找，直到仓库根；用最近一个含配置文件的目录作为应用目录 |
+| 找不到时 | 报错 `no .oryn/box.yaml found between here and the repository root` |
+| 读取的版本 | `HEAD` 提交里的文件，不是工作区里的文件；配置文件没有提交时报错，先提交 |
+| 指定部署目标时 | `oryn boxes deploy <目标>` 直接用 `.oryn/box-deploy.json` 里该目标记录的应用目录，不再向上查找 |
+
+## 结构
+
+最小写法：
+
+```yaml
+services:
+  web:
+    command: bun run start   # 必须监听 $PORT
+build: bun install && bun run build
+```
+
+## 字段
+
+| 字段 | 类型 | 必填 | 缺省 | 说明 |
+|---|---|---|---|---|
+| `services` | 映射 | 是 | — | 服务名 → 定义，1–4 个服务，按文件顺序 |
+| `services.<服务名>.command` | 字符串 | 是 | — | 服务的启动命令；必须监听 `$PORT` |
+| `services.<服务名>.cwd` | 字符串 | 否 | 应用目录 | 相对应用目录的工作目录 |
+| `build` | 字符串 | 否 | — | 部署前在线程的执行环境（orb）里运行的构建命令 |
+| `source` | 布尔 | 否 | `true` | `true`：release 带源码与 `.git`；`false`：只打包 `artifacts` 列出的构建产物 |
+| `artifacts` | 字符串列表 | `source: false` 时必填 | — | 要打包的构建产物路径，相对应用目录 |
+| `include` | 字符串列表 | 否 | — | 一个仓库里有多个应用时，把仓库里别的目录一起带上；路径相对应用目录 |
+
+## 校验规则
+
+| 项 | 规则 |
+|---|---|
+| 顶层 | 必须是映射 |
+| 未知键 | 忽略，并打印一条警告，列出已知键 `build, source, artifacts, include, services` |
+| 服务数 | 1–4 个；缺少 `services` 或为空时报错 |
+| 服务名 | 匹配 `^[a-z0-9][a-z0-9-]{0,9}$`，不能含 `--` |
+| `command` | 不能为空白 |
+| `cwd`、`artifacts` 各项 | 必须是相对路径，不能含 `..`；`artifacts` 的项不能为空或 `.` |
+| `include` 各项 | 必须是相对路径，可以含 `..`，但换算后不能逃出仓库根；不能为空或 `.` |
+| `source: true` 时的 `artifacts` | 忽略，并打印警告 `box.yaml: artifacts are ignored without source: false (the release holds the source)` |
+| `source: false` 时 | `artifacts` 不能为空；写了 `cwd` 的服务，其 `cwd` 必须是某个 `artifacts` 项或在其之内 |
+
+## 部署目标文件 `.oryn/box-deploy.json`
+
+`oryn boxes deploy` 部署成功后把目标写进仓库根的这个文件，之后在同一个目录里运行 `oryn boxes deploy` 不必再给 `--on` 与 `--name`。这个文件由 CLI 维护，不需要手写。
+
+```json
+{
+	"targets": {
+		"default": {
+			"on": "<box 名或 id>",
+			"name": "<应用名>"
+		}
+	}
+}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `targets` | 目标名 → 目标；目标名是应用目录的最后一段，应用目录是仓库根时为 `default` |
+| `on` | 目标 box |
+| `name` | 应用名 |
+| `root` | 应用目录相对仓库根的路径；仓库根时省略 |
+| `private` | 应用设为私有时为 `true`；否则省略 |
+
+文件不存在时视为没有目标。第一次部署必须给出 `--on <box>` 与 `--name <应用>`，否则报错 `the first deploy needs --on <box> --name <app>`。命令参数见 [`oryn boxes`](/reference/cli/boxes/)。

@@ -1,0 +1,122 @@
+---
+title: 斜杠命令与输入前缀
+description: 输入框里由 Oryn 客户端处理的斜杠命令、别名、不可用的命令、协调对话里可用的子集，以及输入前缀。
+type: reference
+sources:
+  - file: web/src/lib/slash.ts
+  - file: web/src/lib/composer.ts
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 2
+---
+
+在输入框里以 `/` 开头输入命令。下表的命令由 Oryn 客户端处理，不会作为文字发给模型；其余命令以 `/<命令> <参数>` 原样交给 Agent 内核 omp 执行，结果显示在转录里。命令菜单把两者合并列出。
+
+## 客户端命令
+
+参数提示里 `<…>` 是必填参数，`[…]` 是可选参数。
+
+| 命令 | 参数提示 | 说明 |
+|---|---|---|
+| `/plan` | `[prompt]` | 计划模式：agent 先写计划、经你批准再动手；带上文字则进入后把它作为第一条消息 |
+| `/plan-review` | — | 重新打开收起的计划提案 |
+| `/tree` | — | 会话树：跳转到历史分支 |
+| `/fork` | — | 分叉线程 |
+| `/new` | — | 新建线程 |
+| `/resume` | — | 搜索线程 |
+| `/clear` | — | 就地清空上下文（线程保留） |
+| `/queue` | `<message>` | 排一条消息，等 agent 停下后再发 |
+| `/btw` | `[question]` | 旁路提问：不打断主线，也不进主线上下文 |
+| `/tan` | `<work>` | 派一个克隆会话在后台做旁支工作，进度见 /jobs |
+| `/omfg` | `<complaint>` | 吐槽 agent 的错误做法，生成一条防止再犯的规则 |
+| `/vibe` | `[prompt]` | vibe 模式：只读工具 + 直接驱动工作会话；带上文字则进入后发出 |
+| `/loop` | `[count\|duration] [--while\|--until '<cmd>'] [prompt]` | 循环模式：之后发的 prompt 在每次 agent 停下后重发，可限次数 / 时长，或用命令判定是否继续 |
+| `/goal` | `[objective \| subcommand]` | 目标模式：给 agent 一个持久目标让它自主推进；子命令 set / show / budget / pause / resume / drop |
+| `/guided-goal` | `[rough objective]` | 让 agent 在对话里先问你几个问题，再据此设定目标 |
+| `/pause` | `[on\|off]` | 暂停 / 恢复全部 agent |
+| `/handoff` | `[focus]` | 生成交接文档并就地压缩上下文；可写上交接侧重点 |
+| `/compact` | `[mode] [focus]` | 压缩上下文；可指定压缩模式和侧重点 |
+| `/shake` | `[elide\|images\|thinking]` | 丢掉占地方的内容：elide 大块工具输出（默认）、images 图片、thinking 思考块 |
+| `/fresh` | — | 重置与模型提供方的连接状态（上下文不变） |
+| `/retry` | — | 重试上一轮失败的回合 |
+| `/model` | `[model]` | 切换模型；带上模型名则直接切换 |
+| `/fast` | `[on\|ultra\|off\|status]` | 切换 fast（优先）服务档；status 查看当前档 |
+| `/slow` | `[on\|off\|status]` | 切换 slow（flex / 低优先级）服务档；status 查看当前档 |
+| `/context` | — | 上下文占用报告 |
+| `/usage` | — | 账户用量报告；带参数（如 reset）则交给 omp 执行 |
+| `/jobs` | — | 后台任务；kill `<id>` 取消任务 |
+| `/tools` | — | 当前对 agent 可见的工具 |
+| `/session` | — | 会话统计 |
+| `/agents` | — | 在右栏查看子 agent |
+| `/git` | — | 在右栏查看改动 |
+
+## 参数细则
+
+| 命令 | 规则 |
+|---|---|
+| `/plan`、`/vibe` | 不带参数或 `toggle` 时开关取反；`on`、`true`、`1` 打开；`off`、`false`、`0` 关闭；其它文字表示进入该模式（已在模式里则不变）并把文字作为一条消息发出 |
+| `/pause` | `on`、`true`、`1` 暂停；`off`、`false`、`0` 恢复；不带参数时取反 |
+| `/loop` | `off` 关闭；不带参数或 `on` 时开关取反；其它参数表示带这些参数打开 |
+| `/goal` | 不带参数或 `show` 打开目标对话框；`pause`、`resume`、`drop` 直接执行；`set <objective>` 设定目标；`budget` 不带值打开对话框，`budget off` 取消预算，`budget <N>` 设预算（正整数）；其它文字作为目标 |
+| `/compact` | 第一个词是 omp 公布的压缩模式时，整条命令交给 omp；否则全部参数作为侧重点 |
+| `/shake` | 不带参数等于 `elide` |
+| `/model` | 带参数时，按 `provider/id`、id 或名称精确匹配，其次唯一的包含匹配；对上唯一一个模型就直接切换，否则打开模型对话框并预填搜索 |
+| `/fast` | `ultra` 或 `ultrafast` 选 ultrafast 档；`status` 交给 omp 报告当前档；其余同开关规则 |
+| `/slow` | `status` 交给 omp 报告当前档；其余同开关规则 |
+| `/context`、`/usage`、`/jobs`、`/tools`、`/session` | 不带参数时显示报告；带参数时（如 `/jobs kill <id>`、`/usage reset`）交给 omp 执行 |
+| `/queue`、`/tan`、`/omfg` | 必须带参数，否则提示用法 |
+
+参数不认识时不执行，提示该命令的用法。
+
+## 别名与另行接管的命令
+
+| 输入 | 等同于 |
+|---|---|
+| `/branch`、`/rewind` | 打开回退选择器（同空输入框里连按两次 <kbd>Esc</kbd>） |
+| `/hub`、`/subagents` | `/agents` |
+| `/models` | `/model` |
+| `/thinking <level>` | 直接设置思考档位，档位由 omp 校验；必须带参数 |
+
+## 附件
+
+下列命令执行时会把输入框里的附件一起发出：带文字的 `/plan` 与 `/vibe`、`/queue`，以及交给 omp 的技能命令、自定义命令与文件命令。其余命令执行后，附件留在输入框里。
+
+## 在 Oryn 里不可用的命令
+
+| 命令 | 原因 |
+|---|---|
+| `/settings` `/setup` `/skills` `/collab` `/join` `/leave` `/live` `/record` `/seance` `/debug` `/cleanse` `/restart` `/exit` `/quit` `/copy` `/open` | 只能在终端界面（TUI）里用，Oryn 里没有对应的界面。不出现在命令菜单里 |
+| omp 标为只能在终端界面执行的其它命令 | 同上；`/branch` 与 `/rewind` 例外（见上） |
+| `/move` `/wt` `/worktree` | 会直接改 agent 的工作目录，Oryn 跟不上线程和工作区的对应关系。要在别的目录工作，请新建线程 |
+| `/stats` | 会在执行环境（orb）里启动本地仪表盘，浏览器打不开。看会话统计请用 `/session` |
+| `/export` | 会把会话导出成环境里的 HTML 文件，Oryn 还没有下载入口 |
+| `/session delete` | 会删掉线程绑定的会话文件。要删除这段对话，在线程标题栏的「更多操作」里选「删除线程」；只想从列表收起，选「归档」 |
+| `/ssh add`、`/ssh remove`、`/ssh rm`（环境里的工作线程） | SSH 主机由 Oryn 集中管理：到「设置 → SSH 主机」里添加或修改。`/ssh list` 与 `/ssh help` 照常交给 omp |
+
+## 协调对话里可用的命令
+
+Space 的协调对话与全局助手的对话里，命令菜单中出现的客户端命令只有下列这些：
+
+`/tree` `/new` `/resume` `/clear` `/queue` `/compact` `/retry` `/model` `/fast` `/slow` `/context` `/usage` `/jobs` `/tools` `/session`
+
+计划、目标、vibe、循环、bash、旁路提问、分叉、交接等操作在协调对话里被拦下，提示「协调对话里不能用「`<名称>`」」。
+
+## 输入前缀
+
+| 输入 | 作用 |
+|---|---|
+| `!<命令>` | 运行 bash 命令，结果进入上下文 |
+| `!!<命令>` | 运行 bash 命令，结果不进入上下文 |
+| `$ <代码>` | 运行 Python 代码（eval） |
+| `$$ <代码>` | 运行 Python 代码，结果不进入上下文 |
+| `? <问题>` | 旁路提问，同 `/btw` |
+| `-> <消息>`、`=> <消息>` | 排队，等回合结束后发送 |
+| `/<命令>` | 斜杠命令；`/` 后须紧跟非空白、非 `/` 的字符 |
+| 单独一个 `.` | 继续（resume） |
+
+- `$` 与 `$$` 后必须紧跟空白字符，所以 `$HOME`、`$100` 这类文字按普通消息发送。
+- 以 `??` 开头的文字不算旁路提问。
+- `!`、`!!`、`$`、`$$`、`->`、`=>` 后没有内容时，视为空输入，不发送。
+
+按键见[键盘快捷键](/reference/ui/shortcuts/)，输入框的用法见[输入框：发送、引导与排队](/guide/threads/composer/)。

@@ -1,0 +1,58 @@
+---
+title: 参考
+description: 命令行、配置文件、项目文件、界面、环境变量、术语与 API 的参考页索引。
+type: reference
+sources:
+  - file: README.md
+verified: 6fe0baf13191
+sidebar:
+  order: 0
+---
+
+参考页只列值：命令、键、字段、默认值与上限。要完成某件事，从[使用](/start/what-is-oryn/)或[部署与运维](/admin/overview/)的指南开始。
+
+## 命令行
+
+| 页面 | 内容 |
+|---|---|
+| [命令行总览](/reference/cli/) | `oryn` 的运行位置、凭据、退出码约定与全部命令的索引 |
+| 各命令页，如 [`oryn thread`](/reference/cli/thread/) | 每个顶层命令一页，原样收录各级子命令的 `--help` 输出 |
+| [orynd](/reference/cli/orynd/) | 控制面 `orynd` 的启动参数与管理子命令 |
+| [orbd](/reference/cli/orbd/) | 执行环境（orb）里的守护进程 `orbd` 的参数，含在自己机器上接入 Runner 的 `--runner` 形态 |
+| [oryn-push-gateway](/reference/cli/oryn-push-gateway/) | 自建推送网关的启动参数 |
+
+## 配置文件
+
+| 页面 | 内容 |
+|---|---|
+| [orynd.yaml](/reference/config/orynd-yaml/) | 控制面配置的全部键、类型、默认值与约束 |
+| [provider.yaml](/reference/config/provider-yaml/) | Provider 配置，按 `docker`、`dispatch`、`firecracker` 驱动分节 |
+| [推送网关 gateway.yaml](/reference/config/push-gateway-yaml/) | 自建推送网关配置的全部键、类型、默认值与约束 |
+
+## 项目文件
+
+放在仓库里、由 Oryn 读取的文件。
+
+| 页面 | 内容 |
+|---|---|
+| [`.oryn/setup` 与 `.oryn/resume`](/reference/project-files/setup-resume/) | 环境生命周期脚本的查找顺序、运行时机、超时与日志 |
+| [`.oryn/services.yaml`](/reference/project-files/services-yaml/) | 受管服务的字段、校验、注入的环境变量与重启策略 |
+| [`.oryn/box.yaml`](/reference/project-files/box-yaml/) | box 应用的部署配置，以及部署目标文件 `.oryn/box-deploy.json` |
+| [`.oryn/desktop/resume`](/reference/project-files/desktop-resume/) | 远程桌面就绪后执行的脚本 |
+
+## 界面
+
+| 页面 | 内容 |
+|---|---|
+| [键盘快捷键](/reference/ui/shortcuts/) | 应用级快捷键与输入框在两种发送键设置下的按键 |
+| [斜杠命令与输入前缀](/reference/ui/slash-commands/) | 客户端处理的斜杠命令、别名、不可用的命令与输入前缀 |
+| [设置页索引](/reference/ui/settings/) | 21 个设置分区与项目设置的 7 个分组 |
+
+## 其它
+
+| 页面 | 内容 |
+|---|---|
+| [环境变量](/reference/env-vars/) | `oryn` 与 `orbd` 读取的环境变量，以及环境内与应用进程里可以读到的变量 |
+| [术语表](/reference/glossary/) | 本站术语的一句话定义与令牌、标识的前缀 |
+| [API 使用约定](/reference/api-guide/) | REST 与 WebSocket 的地址、鉴权、数据格式与路径编码 |
+| [API 端点](/reference/api/) | 由 OpenAPI 规格生成的全部端点 |

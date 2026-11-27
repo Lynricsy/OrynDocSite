@@ -1,0 +1,52 @@
+---
+title: .oryn/desktop/resume
+description: 远程桌面就绪后执行的桌面 resume 脚本：查找顺序、触发时机、等待时长与日志位置。
+type: reference
+sources:
+  - file: internal/orbdrt/deskresume.go
+  - file: internal/orbdrt/desktop.go
+verified: 6fe0baf13191
+sidebar:
+  order: 4
+---
+
+桌面 resume 脚本在执行环境（orb）的远程桌面起来之后运行，用来在桌面上拉起应用。远程桌面的用法见[远程桌面与人机接管](/guide/workbench/desktop/)。
+
+## 查找顺序
+
+按顺序取第一个存在、是普通文件且带可执行位的脚本：
+
+| 顺序 | 路径 | 执行时的工作目录 |
+|---|---|---|
+| 1 | 工作目录下的 `.oryn/desktop/resume` | 工作目录 |
+| 2 | `~/.oryn/desktop/resume` | `~` |
+
+存在但不是普通文件或没有可执行位的脚本被跳过，并记一条警告。都没有时什么都不做。
+
+## 触发时机
+
+桌面显示栈每起来一次算一代。每一代在显示已就绪、工作区也已就绪之后执行一次脚本，两个条件中后满足的那个触发执行：
+
+| 事件 | 是否执行 |
+|---|---|
+| 环境启动后桌面第一次就绪 | 执行 |
+| 从冻结中唤醒 | 不执行（代数不变） |
+| 显示栈崩溃后重启 | 再执行一次 |
+| 停机后再次启动 | 执行（代数从头算） |
+
+工作区已就绪，指本次启动后 setup 或 resume 阶段已经结束，成功和失败都算。setup 之后要先拍项目快照、resume 单独运行时，等到 resume 阶段结束才算就绪。setup 与 resume 见 [`.oryn/setup` 与 `.oryn/resume`](/reference/project-files/setup-resume/)。
+
+## 运行方式
+
+| 项 | 值 |
+|---|---|
+| 进程 | 独立的进程组，直接执行脚本文件 |
+| 环境变量 | 环境的基础环境（不含 setup 下发的环境变量） |
+| 等待 | 至多 60 秒；到期仍未退出只在日志里记一条仍在运行，不结束进程 |
+| 退出码非 0 | 记一条警告 |
+
+脚本可以拉起常驻的桌面应用：等待到期后不会被结束，脚本退出后它拉起的进程照常写日志。
+
+## 日志
+
+`~/.cache/oryn/logs/desktop/resume.log`，追加写入。每次执行前写一行 `[orbd] display generation <代数>: running <脚本路径> in <工作目录>`，脚本退出时写一行 `[orbd] resume exited: <结果>`；脚本的标准输出与标准错误也写进这个文件。
