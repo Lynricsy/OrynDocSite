@@ -1,0 +1,71 @@
+---
+title: 让 Agent 使用你本机的 Chrome
+description: 用 Chrome 扩展把你日常使用的浏览器接到 Oryn，让指定线程的 Agent 在你授权后操作其中的标签页。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### 本机浏览器中继（Chrome 扩展）'
+  - file: docs/protocol.md
+    section: '## M27：客户端浏览器中继（Browser Relay）'
+  - file: docs/protocol.md
+    section: '### 扫码配对'
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 6
+---
+
+线程的 Agent 默认使用执行环境（orb）里远程桌面上的 Chromium。有些工作要用你自己的浏览器：复用日常 Chrome 的已登录态、访问你本机的 `localhost` 或公司内网、使用住宅 IP。这时可以在 Chrome 里装浏览器中继扩展并绑定到一个工作线程，Agent 就能在你授权后操作你本机 Chrome 的标签页。
+
+扩展通过配对完成认证后直连控制面，不依赖桌面 App 或常驻的命令行进程。
+
+## 安装扩展并切到云端模式
+
+在 Chrome 中加载 `oryn-core/packages/browser-relay` 扩展，切到「Oryn 云端模式」，输入当前 Oryn 服务器地址。
+
+## 配对扩展
+
+扩展走与其它设备相同的配对流程：扩展发起配对后，在已登录 Oryn 的浏览器里打开 `/pair`，输入配对码，核对设备信息后批准。扩展随后拿到设备令牌，出现在「设置 → 设备」里，类型为「浏览器扩展」。
+
+批准后，这个扩展可以连入控制面；只有在你主动点选共享标签页或确认授权后，指定线程的 Agent 才能操作对应的标签页。
+
+## 把扩展绑定到线程
+
+在线程页头或扩展弹窗中，把扩展一键绑定到指定的工作线程。
+
+绑定之后，Agent 的 `browser.open(...)` 仍然默认走环境里远程桌面的 Chromium；需要操作你本机的 Chrome 时，Agent 显式使用 `app: "relay"`。
+
+| 浏览器 | 什么时候用 |
+|---|---|
+| 环境里远程桌面的 Chromium | 缺省 |
+| 你本机的 Chrome（中继） | Agent 显式使用 `app: "relay"` 时 |
+
+远程桌面见[远程桌面与人机接管](/guide/workbench/desktop/)。
+
+## 审批 Agent 的操作
+
+安全裁决都在你本机的扩展里执行：
+
+- 你没有点选共享的现有标签页对云端完全不可见，它们的元数据不出浏览器。
+- 越权的标签页、`chrome://` 页面与查找下载项的请求直接拒绝；远端发起的重新加载静默丢弃。
+- 新建标签页（不限站点）、打开 `file://`、已共享标签页跨主域名跳转、读取 Cookies 等高危操作，默认进入扩展弹窗的待审批队列。
+
+待审批的操作不会让 Agent 的请求一直挂着：请求立即结束，Agent 收到需要审批的结果，过期的旧请求不会事后执行。你在扩展弹窗里任意时刻点选：
+
+| 选项 | 效果 |
+|---|---|
+| 「允许这次」 | 发一次性放行票据 |
+| 「本会话总是允许」 | 加入本会话的白名单 |
+| 「拒绝」 | 不放行 |
+
+批准后扩展自动通知线程，由 Agent 重试；不会因为等待审批而超时关页。
+
+## 吊销扩展
+
+在「设置 → 设备」里随时吊销这个扩展；吊销后控制面关闭它的连接。
+
+## 相关
+
+- [浏览器 Profile：复用登录态](/guide/workbench/browser-profiles/)
+- [浏览器：登录、设备与外观](/guide/clients/web/)
+- [令牌、设备与单向信任](/security/tokens-trust/)

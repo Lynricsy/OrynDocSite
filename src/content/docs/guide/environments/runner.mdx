@@ -1,0 +1,239 @@
+---
+title: 在自己的机器上跑线程（Runner）
+description: 把你的笔记本、工作站或 NAS 接入 Oryn，让线程里的 Agent 直接在那台机器的目录里工作；包括安全边界、启动、常驻与日常使用。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 11. Runner：在自己的机器上跑线程（M11b）'
+  - file: docs/features.md
+    section: '### 四种执行后端'
+  - file: docs/features.md
+    section: '### 令牌轮换与单向信任'
+  - file: docs/features.md
+    section: '#### 项目级密钥与环境变量'
+  - file: docs/features.md
+    section: '## Agent 沙箱'
+  - file: README.md
+    section: '## 执行环境'
+  - file: cmd/orbd/main.go
+  - file: cmd/oryn/runner.go
+  - file: cmd/oryn/thread.go
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 4
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Runner 是你自己的机器：笔记本、工作站或 NAS。你在那台机器上以普通用户运行 `orbd run --runner`，它主动连到控制面；之后新建线程时可以选「这台 Runner 的某个目录」，线程里的 Agent 就直接在那个目录里工作。它适合要用本地目录或本地硬件的工作。
+
+模型、Agent 配置、记忆与 SSH 主机由控制面提供，与那台机器上你自己的 `omp`、`~/.omp`、`~/.agents`、`~/.ssh` 完全独立；git 与其它命令行工具仍用那台机器自己的环境与凭据。
+
+## 先读：安全边界
+
+<Aside type="caution" title="Runner 完全信任控制面">
+能操作控制面的人——网页会话、设备令牌，或攻破了控制面的人——都能以 Runner 进程的系统用户在那台机器上执行任意命令。Agent 本身不受目录限制，`--dir` 约束的只是面板能看到什么、线程能选什么。
+</Aside>
+
+因此：
+
+- 只在你信任控制面的机器上运行 Runner。
+- 用一个权限有限的普通用户运行。`orbd` 以 root 运行时会直接拒绝，`--allow-root` 才放行。
+- 让 `ORYN_URL` 走 HTTPS。它是非回环的 `http://` 地址时，`orbd` 会告警。
+
+反方向不信任，控制面的密钥不去 Runner：
+
+- **模型密钥**：下发给 Runner 的模型配置里，模型 key 一律换成 `oryn-ph-…` 占位符，地址改写到本机常驻的出站通道。`env` 模式的密钥不下发；需要以环境变量降级下发真实 key 的模型供应商在 Runner 上不可用。下发前控制面会扫描每个配置文件，命中疑似密钥或已知密钥明文的文件扣下不发，并在该 Runner 环境的事件里说明。
+- **出站通道**：本机出站通道只放行模型中转与记忆网关，由控制面注入真实的 key，响应里的回显同步脱敏；其它路径一律 403。控制了这台机器的进程可以经中转调用中央模型（消耗额度），或访问该 Runner 线程所属项目的记忆，但拿不到任何密钥明文。
+- **GitHub 与 git 凭据**：控制面不向 Runner 下发 GitHub OAuth 凭据、git 主机令牌、git 代理改写或提交身份，也不改那台机器的 git 配置。Runner 上的 git 操作用本机自己的凭据。
+- **项目密钥与环境变量**：不下发到 Runner，见[密钥与环境变量](/guide/projects/secrets/)。
+- **SSH 主机**：私钥和密码留在控制面。Runner 上的 `orbd` 为每个线程生成临时密钥，经控制面的网关连接主机，按线程所属项目放行。同一系统用户下的任何本机进程都能读到其它线程的临时私钥文件：这把密钥防的是某个线程的 Agent 误用别的项目的主机，不防恶意本机进程。
+
+谁能操作 Runner 线程：除了你自己，只有全局助手。它可以像你一样在 Runner 上新建线程、发消息、读取、归档、读写线程目录里的文件，删除要你点确认卡。Space 协调者与环境里的 Agent 不能读写或操控任何 Runner 线程。全局助手会读网页与工作线程的输出，注入的指令有可能经它到达 Runner 线程，见[协调沙箱与不可信输入](/security/sandbox-untrusted/)。
+
+Runner 令牌（`ort_…`）在控制面只存哈希。令牌与信任关系的全貌见[令牌、设备与单向信任](/security/tokens-trust/)。
+
+## 支持的平台
+
+| 平台 | 支持 |
+|---|---|
+| Linux `x64`、`arm64` | 支持 |
+| macOS Apple 芯片（`arm64`） | 支持 |
+| Intel mac | 不支持：`orbd` 启动时报「此平台没有 Oryn Core 构建」 |
+| Windows | 不支持原生运行；在 WSL2 里运行 Linux 版 `orbd` |
+
+## 建立并启动 Runner
+
+<Steps>
+
+1. 在「设置 → Runner」里新建一个 Runner，或在你的电脑上运行：
+
+   ```bash
+   oryn runner create laptop
+   ```
+
+   标准输出只有令牌，启动命令打到标准错误。令牌只显示这一次。
+
+2. 在那台机器上放好与控制面同版本的 `orbd`：同一版本发布里的 `oryn-server_<版本>_linux-{x64,arm64}.tar.gz`，或 macOS 用的 `orbd_<版本>_darwin-arm64.tar.gz`。
+
+   确保系统 `PATH` 目录（`$HOME` 之外，如 `/usr/bin`、`/opt/homebrew/bin`）里有 `git`。不要求本机安装 `omp`；要在 bash 里经网关连 SSH 主机，还需 OpenSSH ≥ 8.4。
+
+3. 保存令牌并启动：
+
+   ```bash
+   install -D -m 600 /dev/stdin ~/.config/oryn/runner.token <<< 'ort_…'   # 或用环境变量 ORYN_RUNNER_TOKEN
+   ORYN_URL=https://oryn.example.com orbd run --runner --dir ~/code/app --dir ~/notes [--terminal]
+   ```
+
+   - `--dir` 声明线程可以使用的目录，可以重复；符号链接会先解析成真实路径。
+   - `--terminal` 开启终端面板；不带它时 Runner 线程没有终端。
+   - 令牌缺省从 `ORYN_RUNNER_TOKEN` 读，其次是 `--token-file`，再其次是 `~/.config/oryn/runner.token`；必须以 `ort_` 开头。
+   - 同一个系统用户只能跑一个 Runner 实例。
+
+   首次启动时，`orbd` 从 GitHub Release 下载钉定版本的 Oryn Core，校验 SHA-256 后缓存在 `~/.oryn/core/<tag>/omp`；下载或校验失败即启动失败，不会回退到本机的 `omp`。`oryn runner ls` 列出各 Runner 的在线状态、主机与目录。
+
+</Steps>
+
+全部参数、校验规则与退出码见 [`orbd` 参考](/reference/cli/orbd/)。
+
+### 无法直连 GitHub 或端口被占用
+
+| 情况 | 处理 |
+|---|---|
+| 无法直连 GitHub 下载 Oryn Core | 设 `ORYN_CORE_BASE_URL=<镜像根>`，`orbd` 请求 `<ORYN_CORE_BASE_URL>/<tag>/omp-<os>-<arch>` |
+| 出站通道端口 `127.0.0.1:7811` 被占用（启动失败） | 设 `ORYN_EGRESS_ADDR=127.0.0.1:<端口>`，只允许 `127.0.0.0/8` 或 `[::1]` 回环地址 |
+| SSH 网关端口 `127.0.0.1:7822` 需要换 | 设 `ORYN_SSH_ADDR`。监听失败不影响启动，只是该 Runner 上 SSH 网关不可用 |
+
+### 本机写入了哪些文件
+
+`orbd` 只在 `~/.oryn/` 下维护自己的文件，不写进项目目录：
+
+| 路径 | 内容 |
+|---|---|
+| `~/.oryn/core/<tag>/omp` | 下载并校验后的 Oryn Core |
+| `~/.oryn/omp/` | 独立的 Agent 配置根，含控制面下发的配置 |
+| `~/.oryn/project-config/` | 按线程所属项目缓存的项目层配置 |
+| `~/.oryn/threads/<线程>/` | 线程会话文件；开启 SSH 网关时还有每个线程的临时私钥 |
+| `~/.oryn/ssh/config` | 供 bash 里 `ssh -F ~/.oryn/ssh/config <主机名>` 使用的网关配置 |
+| `~/.oryn/orbd/` | 实例锁、线程与 worktree 登记表、本地控制口 |
+
+`orbd` 不读写你自己的 `~/.omp`、`~/.agents`、`~/.claude`（及其它外部工具的用户级目录）、`~/.ssh` 与 git 配置；仓库内的项目级规则与技能（`AGENTS.md`、`.omp/`、`.claude/skills` 等）照常生效。
+
+## 让 Runner 常驻（systemd 用户单元）
+
+在 Linux 上用 systemd 用户单元让 Runner 常驻：
+
+```ini
+# ~/.config/systemd/user/oryn-runner.service
+[Unit]
+Description=Oryn runner
+After=network-online.target
+[Service]
+Environment=ORYN_URL=https://oryn.example.com
+ExecStart=%h/.local/bin/orbd run --runner --dir %h/code/app --terminal
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=default.target
+```
+
+```bash
+systemctl --user enable --now oryn-runner
+# 要在未登录时也运行，执行一次：
+loginctl enable-linger <用户>
+```
+
+## 在 Runner 上开线程
+
+新建线程时，在执行位置里选 Runner 和目录，可以再填子路径。界面上的选法见[新建线程与选择执行位置](/guide/threads/new-thread/)。
+
+同一个目录已有未归档的线程在用时，会提示「新建 worktree（推荐）」或「仍然共用」：
+
+- **新建 worktree**：建在仓库旁边，目录是 `<仓库目录>-<名字>`（重名时加 `-2`、`-3`），分支同名。
+- **仍然共用**：两个线程在同一个目录里工作。
+
+等价命令：
+
+```bash
+# 在 Runner 的目录里开线程
+oryn thread new --runner laptop --dir ~/code/app "<提示词>"
+# 先在仓库旁新建 worktree 与同名分支
+oryn thread new --runner laptop --dir ~/code/app --worktree fix-login "<提示词>"
+# 允许与其它未归档线程共用目录
+oryn thread new --runner laptop --dir ~/code/app --share-dir "<提示词>"
+```
+
+`--dir` 须是绝对路径，且在 Runner 声明的目录之内。
+
+### 归档时移除 worktree
+
+线程有 Oryn 建的 worktree 时，归档对话框可以选「同时移除 worktree」。它执行 `git worktree remove` 和 `git branch -d`，不带 `--force` / `-D`：有未提交的改动时 git 会拒绝，分支没合并时会保留，报错原样显示，线程照常归档。
+
+### 改动面板
+
+「改动」面板只在线程目录就是仓库根目录时显示改动；线程目录是仓库的子目录时显示不是 git 仓库。
+
+### 连接 SSH 主机
+
+Oryn 登记的全局主机与线程所属项目的主机，可以直接在 `ssh://<名>/<路径>` 与 `terminal` 工具中按名使用。在 bash 里执行 ssh 时用：
+
+```bash
+ssh -F ~/.oryn/ssh/config <主机名>
+```
+
+裸 `ssh <主机名>` 仍走本机自己的 `~/.ssh/config`。在 Agent 进程之外（例如你本机自己的终端）运行该命令会因缺少线程环境变量 `ORYN_SSH_KEY` 而失败。
+
+### 存入文件库
+
+Runner 上没有 `oryn` 命令行。要把线程工作目录内的普通文件（不超过 100 MiB）放进全局助手的文件库，让 Agent 调用 `oryn_library_put` 工具。
+
+### 中央配置
+
+Runner 线程与其它环境一样使用中央配置（模型、角色、技能、规则、子 Agent、提示模板、MCP）与线程所属项目的项目层配置。全局配置改动后即时下发；项目层配置或项目 SSH 主机改动后，运行中的该线程会标为需要重启。Runner 上的 `/omfg` 不回写中央配置。
+
+## Runner 线程没有的能力
+
+| 能力 | 在 Runner 上 |
+|---|---|
+| Portal 与受管服务 | 没有 |
+| 远程桌面 | 没有 |
+| `oryn sync` | 没有 |
+| 项目快照 | 没有 |
+| 冻结、删除、「连环境一起分叉」 | 不能 |
+| 浏览器 Profile | 不能绑定 |
+| 终端 | 只有带 `--terminal` 启动才有 |
+| 文件与改动面板 | 只能看到线程工作目录里面的内容 |
+| Agent 沙箱 | 不能开 |
+| 项目密钥与环境变量 | 不下发 |
+
+## 离线与升级
+
+- **离线**：连接断开超过 30 秒，Runner 显示为离线。期间发给它的消息排队，每个线程最多 100 条，Runner 重新连上后按顺序送达。
+- **升级**：把本机 `orbd` 换成与控制面同版本并重启。启动后自动下载对应的 Oryn Core 并接收控制面配置。
+
+## 删除 Runner
+
+在「设置 → Runner」里删除 Runner 即吊销令牌，已连着的连接会被断开。等价命令：
+
+```bash
+oryn runner rm <名称或 id>
+```
+
+删除后线程保留转录。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 每个系统用户的 Runner 实例 | 1 个 |
+| 离线判定 | 连接断开超过 30 秒 |
+| 离线期间排队的消息 | 每个线程 100 条 |
+| 存入文件库的单个文件 | 100 MiB |
+
+## 相关
+
+- [`orbd` 参考](/reference/cli/orbd/)
+- [`oryn runner`](/reference/cli/runner/)、[`oryn thread`](/reference/cli/thread/)
+- [选择执行后端](/guide/environments/backends/)
+- [令牌、设备与单向信任](/security/tokens-trust/)

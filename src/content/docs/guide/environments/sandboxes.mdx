@@ -1,0 +1,154 @@
+---
+title: Agent 沙箱
+description: 让线程里的 Agent 开一台零凭据、用完即焚的平级隔离机器来跑不可信代码或做破坏性实验，以及你在哪里查看和销毁它。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '## Agent 沙箱'
+  - file: README.md
+    section: '## 执行环境'
+  - file: README.md
+    section: '## CLI 速查'
+  - file: cmd/oryn/sandbox.go
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 5
+---
+
+import Shot from '@/components/Shot.astro';
+import Requires from '@/components/Requires.astro';
+
+线程里的 Agent 需要一次性的隔离环境时——跑不可信代码、做破坏性实验、离线测试、在干净环境里复现问题——可以开一台沙箱。沙箱是与线程自己的执行环境（orb）平级的临时机器，里面没有任何凭据，用完即焚。
+
+<Requires ids={['sandbox']} />
+
+## 谁能开沙箱
+
+可以开沙箱的是 Docker 与 Firecracker 环境上的工作线程，包括自动化线程和开在 box 上的线程。Runner 线程、Space 协调者、全局助手与沙箱自身不能开沙箱。
+
+权限按机器算：同一台环境上的线程看得到、也操作得了彼此的沙箱，别的环境看不到。
+
+## 让 Agent 开沙箱并运行命令
+
+环境里的 Agent 有 8 个原生工具，全部按需加载；控制面报告沙箱可用时，系统提示里另有一段沙箱指引，列出可用的后端。终端里的等价命令是 `oryn sandbox …`：
+
+| 工具 | 等价命令 | 作用 |
+|---|---|---|
+| `sandbox_create` | `oryn sandbox up --network none\|egress [--backend docker\|kvm] [--type T] [--idle 30m] [--ttl 2h]` | 开一台沙箱，等它就绪后返回 id |
+| `sandbox_exec` | `oryn sandbox exec <id> [--cwd D] [--env K=V]... [--timeout 600] [--detach] -- <命令>` | 运行命令；`detach` 起后台作业 |
+| `sandbox_cp` | `oryn sandbox cp [--exclude P]... [--gitignore] <src> <dst>` | 双向传文件或目录（恰有一侧写成 `<id>:<路径>`） |
+| `sandbox_network` | `oryn sandbox net <id> none\|egress` | 切换网络 |
+| `sandbox_jobs` | `oryn sandbox jobs <id> [ls \| logs <job> [--offset N] \| kill <job>]` | 后台作业列表、读输出、终止 |
+| `sandbox_extend` | `oryn sandbox extend <id> --ttl 1h` | 把绝对期限设为从现在起多久 |
+| `sandbox_list` | `oryn sandbox ls [--json]` | 列出这台机器的沙箱（含最近 60 分钟内结束的） |
+| `sandbox_destroy` | `oryn sandbox rm <id>` | 销毁 |
+
+`sandbox_list` 是只读工具，其余 7 个按执行类工具审批。对话里每次调用显示一张工具卡，`sandbox_exec` 运行时输出实时滚动。全部参数见 [`oryn sandbox`](/reference/cli/sandbox/)。
+
+### 选择后端
+
+| 后端 | 是什么 |
+|---|---|
+| `kvm` | Firecracker microVM |
+| `docker` | Docker 容器，包括 Sysbox 类型 |
+
+省略后端时优先 `kvm`（部署方可改），没有可用的再退到另一个。规格用 Provider 的环境类型名，省略取 Provider 的默认类型。沙箱只用 Provider 的基础镜像或根盘，不带项目、快照、setup 与 Agent。Provider 要显式开启沙箱，没开启的 Provider 不参与调度。
+
+### 选择网络
+
+创建时必须给出网络：
+
+| 网络 | 含义 |
+|---|---|
+| `none` | 完全没有网卡，只有 `lo` |
+| `egress` | 可以访问公网；宿主与私有网段被防火墙挡住 |
+
+控制通道不走沙箱的网卡，而是经 Provider 中继，所以断网的沙箱照样能运行命令、传文件。
+
+创建时为 `egress` 的沙箱可以在 `egress` 与 `none` 之间来回切。创建时为 `none` 的沙箱没有网卡，不能开网（`network_unavailable`）；需要联网就新开一台 `egress` 的。
+
+### 运行命令与后台作业
+
+- 同步执行默认超时 600 秒，上限 1800 秒。stdout 与 stderr 实时转发，退出码原样透传，超时为 124。调用方中途放弃时，沙箱里的进程组随之被杀。
+- 更长的任务用 `--detach` 起后台作业：超时可以不限，或设为 1 秒到 24 小时；同时至多 16 个。
+- 后台作业的输出合写到日志，至多 64 MiB；用 `sandbox_jobs` 分段读取，单次 256 KiB，缺省读末尾。
+- 工作目录缺省 `~`，可以附加环境变量。
+
+### 传文件
+
+文件或目录可以双向传，以 tar 流经控制面中转、不落盘，单次至多 2 GiB。
+
+- `dst` 是目标的完整路径，不是父目录。源是目录时，内容合并进已存在的目标目录；父目录自动创建。
+- 两端路径都限在各自的 `$HOME` 之内，不能是 `$HOME` 本身或 `~/.oryn` 里的东西。
+- `--exclude` 排除文件：带 `/` 的模式匹配相对路径，否则匹配任意层的名字。
+- `--gitignore` 只带 git 会跟踪的文件与未被忽略的新文件，`.git/` 不带。
+- 符号链接原样保留；指向目标目录之外的跳过，并计入「跳过」数。
+
+## 查看与销毁沙箱
+
+<Shot id="site/sandbox" alt="线程信息页的「沙箱」区块：一台在用的 Docker 联网沙箱显示空闲回收倒计时与到期时刻，旁边有删除按钮；一台已销毁的 KVM 断网沙箱显示结束原因" />
+
+在线程信息页的「沙箱」区块里，列出该线程的沙箱：后端、网络、状态、剩余空闲时间、到期时刻。在用的可以「销毁」，已结束的显示原因。信息面板的其它区块见[信息面板](/guide/workbench/info-panel/)。
+
+在环境外，用设备令牌列出与销毁：
+
+```bash
+# 列出全部在用的沙箱，或某个线程名下的
+oryn sandbox ls [--thread <线程 id>]
+# 销毁
+oryn sandbox rm <沙箱 id>
+```
+
+在环境外只能用 `ls` 与 `rm`。全局助手只能列出沙箱，不能销毁。
+
+沙箱没有终端、文件浏览与独立总览页。普通的环境接口不能暂停、恢复或删除沙箱机器，也不能在上面开线程。
+
+## 沙箱何时被回收
+
+**超时**
+
+- 空闲超时缺省 30 分钟，创建时可设 5–240 分钟。空闲指没有命令在跑（包括后台作业），也没有在传文件或改网络。
+- 最长寿命硬上限缺省 12 小时。
+- 可以另设绝对期限（TTL，1–720 分钟）：到点即销毁，哪怕命令还在跑。用 `sandbox_extend` 续期，但不能越过最长寿命。
+
+**级联**
+
+| 发生了什么 | 沙箱 |
+|---|---|
+| 归属线程归档或删除 | 销毁 |
+| 所属环境停机、删除或失败 | 销毁 |
+| 所属环境冻结 | 不动 |
+| Provider 在线而沙箱失联 2 分钟 | 销毁 |
+| 创建后 120 秒仍未就绪 | 创建失败并清理 |
+
+控制面重启后由对账补做清理，没人认领的沙箱机器也会被删掉。
+
+## 沙箱里没有什么
+
+沙箱里没有模型与 git 密钥、项目环境变量、GitHub、记忆、SSH 网关，也没有出站代理；它与控制面的连接不开放任何控制面能力。沙箱里的输出与带回来的文件都按不可信内容对待。
+
+## 升级后的兼容
+
+沙箱里跑的是 Provider 镜像（或 Firecracker 根盘）自带的 `orbd`，镜像没更新时创建会失败，并提示重建镜像。已有环境里的 Agent 要等这台环境的 `orbd` 升级（重建环境）后才有沙箱工具。`cp` 要求两端的 `orbd` 都是新版，否则报 `orbd_outdated`。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 每台环境同时在用的沙箱 | 2 台（部署方可改） |
+| 全局同时在用的沙箱 | 8 台（部署方可改） |
+| 同步命令超时 | 缺省 600 秒，上限 1800 秒 |
+| 同时运行的后台作业 | 16 个 |
+| 后台作业超时 | 不限，或 1 秒到 24 小时 |
+| 后台作业日志 | 64 MiB；单次读取 256 KiB |
+| 单次传文件 | 2 GiB |
+| 空闲超时 | 缺省 30 分钟，可设 5–240 分钟 |
+| 绝对期限 | 1–720 分钟 |
+| 最长寿命 | 缺省 12 小时 |
+
+## 相关
+
+- [启用 Agent 沙箱（管理员）](/admin/backends/sandbox/)
+- [`oryn sandbox`](/reference/cli/sandbox/)
+- [协调沙箱与不可信输入](/security/sandbox-untrusted/)

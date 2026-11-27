@@ -1,0 +1,74 @@
+---
+title: 选择执行后端
+description: Docker、Sysbox、Firecracker 与本机 Runner 四种执行后端在隔离方式上的差别、各自适合的场景，以及管理员要先做的准备。
+type: explanation
+sources:
+  - file: docs/features.md
+    section: '### 四种执行后端'
+  - file: README.md
+    section: '## 执行环境'
+  - file: docs/deploy.md
+    section: '### 带 Docker 的 orb（sysbox）'
+  - file: docs/deploy.md
+    section: '## 12. Firecracker provider（M11b）'
+  - file: docs/deploy.md
+    section: '### 行为差异'
+  - file: web/src/i18n/locales/zh-CN.json
+  - file: docs/features.md
+    section: '### 项目'
+  - file: cmd/oryn/project.go
+  - file: docs/deploy.md
+    section: '## 11. Runner：在自己的机器上跑线程（M11b）'
+verified: 6fe0baf13191
+sidebar:
+  order: 2
+---
+
+*本页回答：四种执行后端差在哪、各适合什么？*
+
+每个线程运行在自己的执行环境（orb）里。同一个控制面可以同时接入四种后端，按项目或线程选用：在项目设置「环境」分组里设默认的环境类型（命令行 `oryn project create` 的 `--provider` 与 `--type` 设默认 Provider 与类型），或在新建线程时选择执行位置，见[新建线程与选择执行位置](/guide/threads/new-thread/)。
+
+## 对比
+
+| 后端 | 隔离方式 | 说明 | 适合 |
+|---|---|---|---|
+| Docker 容器 | 普通容器 | 默认剥离 `NET_RAW` 与 `NET_ADMIN` | 默认选择 |
+| Sysbox 嵌套容器 | 非特权 UID 映射 | 可在容器内运行内层 `dockerd`，无需 `--privileged` | 需要 Docker-in-Docker 的项目 |
+| Firecracker microVM | 独立 Linux 内核 | `/30` 点对点 tap 网络与 jailer 槽位隔离 | 不可信代码、需要内核级隔离 |
+| 本机 Runner | 个人机器上的普通用户进程 | 以 `orbd run --runner` 直连指定目录；跑 Oryn Core，配置不含密钥 | 本地目录、本地硬件 |
+
+## Docker
+
+Docker 是默认后端。环境是一个普通容器，默认剥离 `NET_RAW` 与 `NET_ADMIN`。普通类型的环境里也有 `docker` 命令，但连不上守护进程；需要在环境里跑 Docker 时选 Sysbox 类型。
+
+**管理员先做**：接入 Docker Provider，见[接入 Docker Provider](/admin/install/docker-provider/)。
+
+## Sysbox
+
+Agent 在环境里有免密 sudo，所以 Oryn 不支持 `--privileged`（那等于把宿主 root 交给 Agent），也不做 rootless DinD（它要求放宽 seccomp、AppArmor 与 `/proc` 掩码，放宽的部分正好落在 Agent 手里）。Sysbox 让容器里的 root 映射到宿主上的非特权 uid，不放宽宿主侧的任何防线。
+
+这种类型的环境里，`dockerd` 由环境托管，setup 会等它能接受请求后再开始；setup 里拉取的镜像随项目快照保存。对 Sysbox 环境拍快照时 Provider 要先停机，所以对它做「连环境一起分叉」时，源环境会重启一次，里面运行中的进程和内层容器会被中断。
+
+**管理员先做**：建隔离网桥、开启环境与控制面之间连接的 TLS、安装 Sysbox 并在 `provider.yaml` 里加一个类型，同时接受几项宿主侧风险，见[带 Docker 的环境（Sysbox）](/admin/backends/sysbox/)。
+
+## Firecracker
+
+每个环境是一台 Firecracker microVM：独立内核、独立的根文件系统写层、每台 VM 一条 `/30` 点对点 tap。隔离强于容器，代价是 Provider 必须以 root 运行，宿主要有 KVM。
+
+与 Docker 环境相比，冻结只停 vCPU、内存仍占用；停机时向 guest 发关机请求；项目快照是可写盘的稀疏复制。模型与 git 的密钥仍然不进 VM，环境令牌只放在 guest 的内存文件系统里。
+
+**管理员先做**：准备 x86_64 宿主（`/dev/kvm` 与 `/dev/net/tun` 可用、cgroup v2），构建并安装产物、网络脚本，再启动 Firecracker Provider，见 [Firecracker Provider](/admin/backends/firecracker/)。
+
+## 本机 Runner
+
+Runner 是你自己的机器（笔记本、工作站、NAS），支持 Linux 与 macOS，Windows 机器经 WSL2 运行 Linux 版。线程里的 Agent 直接在你声明的目录里工作，git 与其它命令行工具用那台机器自己的环境与凭据；模型、Agent 配置、记忆与 SSH 主机由控制面提供，控制面的密钥不下发到 Runner。
+
+Runner 完全信任控制面，而且 Runner 线程没有 Portal、受管服务、远程桌面、项目快照，不能冻结或「连环境一起分叉」。目录已有活动线程时会报错：可以在界面上选择新建 worktree，或用 `--worktree <名>` 在仓库旁新建独立的 `git worktree`。
+
+**你自己做**：在「设置 → Runner」里新建 Runner，在那台机器上以普通用户运行 `orbd run --runner`，见[在自己的机器上跑线程（Runner）](/guide/environments/runner/)。
+
+## 相关
+
+- [环境如何随线程生灭](/guide/environments/lifecycle/)
+- [开发镜像里有什么](/guide/environments/dev-image/)
+- [部署总览](/admin/overview/)
