@@ -41,36 +41,37 @@ sources:
     section: '### 原生壳'
   - file: docs/desktop.md
     section: '## 自动更新'
-verified: 6fe0baf13191
+  - file: .github/workflows/release.yml
+verified: dbad5aea064c
 sidebar:
   order: 2
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-环境镜像不随版本发布，每次升级控制面都要在同一版本的源码里重建；Runner 上的 `orbd` 要换成与 `orynd` 同版本。本页按组件列出 Oryn 文档给出的升级步骤，以及升级后已有执行环境（orb）的表现。
+二进制与环境镜像按同一个版本号发布，升级控制面时环境镜像也要换成同一版本；Runner 上的 `orbd` 要换成与 `orynd` 同版本。本页按组件列出 Oryn 文档给出的升级步骤，以及升级后已有执行环境（orb）的表现。
 
 ## 升级控制面与环境镜像
 
-在源码目录检出新版本，再按首次安装时选用的来源取得二进制（二选一），最后在同一版本的源码里重建环境镜像：
+按首次安装时选用的来源取得新版本（二选一）：
 
 ```bash
-git checkout v<版本>
-
-# 来源一：GitHub Release
+# 来源一：GitHub Release 与 GHCR
 sha256sum -c --ignore-missing oryn-server_<版本>_SHA256SUMS
 tar -xzf oryn-server_<版本>_linux-x64.tar.gz      # ARM64 用 linux-arm64
 sudo install -m 0755 oryn-server_<版本>_linux-x64/{orynd,oryn} /usr/local/bin/
+docker pull ghcr.io/lynricsy/oryn-orb:<版本>     # 多架构，与二进制同版本
 
 # 来源二：从源码构建
+git checkout v<版本>
 make web
 make build
 sudo install -m 0755 bin/orynd bin/oryn /usr/local/bin/
-
+scripts/fetch-core.sh
 make image                      # 构建环境镜像 oryn-orb:dev
 ```
 
-各条命令的说明见[安装二进制与镜像](/admin/install/binaries-and-image/)。
+Provider 的 `docker.image` 用的是带版本号的 GHCR 标签（`ghcr.io/lynricsy/oryn-orb:<版本>`）时，把它改成新版本的标签。用了官方 VS Code 派生镜像时，在新的底镜像上重新执行 `make image-vscode`。各条命令的说明见[安装二进制与镜像](/admin/install/binaries-and-image/)。
 
 升级后的首次启动，如果统计事实行的版本与当前代码不一致，`orynd` 会在后台逐线程重算统计数据，期间统计页顶部显示「历史数据回填中」，其它功能照常。详见[统计数据的保留与重算](/admin/operations/stats-retention/)。
 
@@ -78,11 +79,11 @@ make image                      # 构建环境镜像 oryn-orb:dev
 
 停机环境的只读预览要求控制面与 Provider 升级到同一版本。旧版 Provider 不声明这项能力，文件面板会提示唤醒后才可浏览文件。
 
-## 重建镜像后已有环境的表现
+## 更新镜像后已有环境的表现
 
-- 已存在的环境用的仍是旧镜像。Chromium 与 VS Code 随镜像发布，要定期重建镜像（`make image`）以跟进安全更新。
-- 重建环境镜像会让该 Provider 上的全部项目快照失效。
-- Chromium 与 VS Code 的沙箱只在新建的环境里启用；升级前建的旧容器退回 `--no-sandbox`。
+- 已存在的环境用的仍是旧镜像。Chromium 与代码编辑器随镜像发布，要定期更新环境镜像以跟进安全更新：用 GHCR 镜像时定期重新 `docker pull` 同一标签（每周重建）；从源码构建时重跑 `make image`；用官方 VS Code 派生镜像时随后重跑 `make image-vscode`。
+- 重新 `docker pull` 或重建环境镜像后，该 Provider 上的全部项目快照失效。
+- Chromium 与代码编辑器的沙箱只在新建的环境里启用；升级前建的旧容器退回 `--no-sandbox`。
 
 ## 让已有环境用上 Agent 沙箱
 
@@ -103,11 +104,10 @@ Firecracker 的根盘要换成新文件，不能原地覆盖。运行中 VM 的�
 
 ## 升级协调宿主的 omp
 
-启用了[协调宿主](/admin/components/coordinator/)时，同时替换 `orynd` 与 `/usr/local/lib/oryn/omp`，然后重启 `orynd`。omp 在新版本的源码目录里取得：
+启用了[协调宿主](/admin/components/coordinator/)时，同时替换 `orynd` 与 `/usr/local/lib/oryn/omp`，然后重启 `orynd`。新版本 Release 的 Linux 发布包里附带 `omp`：
 
 ```bash
-scripts/fetch-core.sh x64
-sudo install -D -m 0755 build/core/x64/omp /usr/local/lib/oryn/omp
+sudo install -D -m 0755 oryn-server_<版本>_linux-x64/omp /usr/local/lib/oryn/omp   # 从源码构建时为 build/core/x64/omp
 ```
 
 `orynd` 启动时与每次拉起协调宿主前，都会核对 omp 的 sha256 与编进 `orynd` 的 `core/source.json` 是否一致。不一致时协调功能不可用，普通线程不受影响。

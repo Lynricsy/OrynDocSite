@@ -12,7 +12,7 @@ sources:
   - file: cmd/oryn/login.go
   - file: web/src/components/transcript/WorkingFooter.tsx
   - file: web/src/i18n/locales/zh-CN.json
-verified: 6fe0baf13191
+verified: dbad5aea064c
 sidebar:
   order: 3
 ---
@@ -26,7 +26,7 @@ import { Steps } from '@astrojs/starlight/components';
 - 一台装有 Docker 的 Linux 主机，Docker 网桥为 `docker0`（下面的命令从它取监听地址）。
 - Go `1.27+` 与 Bun `1.4+`。
 - git 2.31 或更高版本。控制面的项目仓库镜像与仓库浏览用它；版本不够时控制面照常启动，但仓库浏览停用。
-- Docker 数据盘留出足够空间：开发镜像 `oryn-orb:dev` 解压后约 10.2 GB。
+- Docker 数据盘留出足够空间：orb 镜像解压后约 9.9 GB。
 - 本机已有 omp 配置目录 `~/.omp/agent`，里面配好了你要用的模型。第 3 步会把它上传到控制面，其中明文的 API Key 会自动转入控制面的加密密钥库。
 - 一个支持 Passkey 的浏览器。
 

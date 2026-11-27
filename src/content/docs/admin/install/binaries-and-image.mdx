@@ -1,6 +1,6 @@
 ---
 title: 安装二进制与镜像
-description: 取得控制面与命令行二进制，构建同版本的环境镜像，并准备服务用户与目录。
+description: 取得控制面与命令行二进制、同版本的环境镜像，并准备服务用户与目录。
 type: how-to
 sources:
   - file: docs/deploy.md
@@ -9,24 +9,15 @@ sources:
   - file: README.md
     section: '## 快速开始'
   - file: internal/config/config.go
-verified: 6fe0baf13191
+  - file: .github/workflows/release.yml
+verified: dbad5aea064c
 sidebar:
   order: 1
 ---
 
-部署的第一步是在控制面主机上放好 `orynd` 与 `oryn` 两个二进制，并构建执行环境（orb）使用的镜像。二进制有两种来源，二选一；环境镜像不随版本发布，无论二进制来自哪里，都要在同一版本的源码里构建。
+部署的第一步是在控制面主机上放好 `orynd` 与 `oryn` 两个二进制，并准备执行环境（orb）使用的镜像。二进制与环境镜像按同一个版本号发布，下文的 `<版本>` 是 tag 去掉 `v` 的部分（如 `0.1.0-rc.12`）。有两种来源，二选一。
 
-## 检出同一版本的源码
-
-两种来源都要用到源码：构建镜像只能在源码里做。先检出与要安装的二进制相同的版本：
-
-```bash
-git clone https://github.com/Lynricsy/Oryn.git
-cd Oryn
-git checkout v<版本>
-```
-
-## 来源一：下载发布包
+## 来源一：下载发布包与镜像
 
 在 [GitHub Releases](https://github.com/Lynricsy/Oryn/releases) 下载对应版本的服务端发布包与校验文件。发布包里的二进制已嵌入 Web UI，静态链接。
 
@@ -47,37 +38,58 @@ git checkout v<版本>
 | `gemini-rerank` | 把 Hindsight 的 Cohere 重排请求转换为 Gemini Decisions 请求的适配器 |
 | `oryn-push-gateway` | 自建推送网关，见[移动推送与自建推送网关](/admin/components/push-gateway/) |
 | `oryn-push-gateway.service` | 推送网关的 systemd 单元 |
+| `omp` | 钉定版本的 Oryn Core，供[协调宿主](/admin/components/coordinator/)使用，已按 `core/source.json` 校验 |
 
-校验并安装控制面与命令行二进制（ARM64 主机把 `linux-x64` 换成 `linux-arm64`）：
+校验并安装控制面与命令行二进制，再拉取同版本的环境镜像（ARM64 主机把 `linux-x64` 换成 `linux-arm64`）：
 
 ```bash
 sha256sum -c --ignore-missing oryn-server_<版本>_SHA256SUMS
 tar -xzf oryn-server_<版本>_linux-x64.tar.gz
 sudo install -m 0755 oryn-server_<版本>_linux-x64/{orynd,oryn} /usr/local/bin/
+docker pull ghcr.io/lynricsy/oryn-orb:<版本>     # 多架构，与二进制同版本
 ```
+
+### 镜像标签
+
+GHCR 上的 `oryn-orb:<版本>` 每周重建一次，以跟进 Arch 的安全更新，同一个标签会指向新的构建。`<版本>-<UTC 日期>`（如 `0.1.0-rc.12-20261130`）建好后不再变动，要钉定或回滚时用它。
+
+重新 `docker pull` 之后，新建的环境才用新镜像，Provider 上的项目快照随之失效（见[快照与预热池](/admin/backends/snapshots-pool/)）。
+
+Docker Provider 的 `docker.image` 缺省是 `oryn-orb:dev`（从源码构建的镜像名）。用 GHCR 镜像时，要把它设为 `ghcr.io/lynricsy/oryn-orb:<版本>`，见[接入 Docker Provider](/admin/install/docker-provider/)。
 
 ## 来源二：从源码构建
 
-在检出的源码根目录执行：
+检出与要安装的版本相同的源码，在源码根目录执行：
 
 ```bash
-make web      # 构建 Web 客户端，复制到 internal/webui/dist 以便嵌入
-make build    # 产出 bin/orynd bin/orbd bin/oryn（嵌入上一步的前端）
+git clone https://github.com/Lynricsy/Oryn.git
+cd Oryn
+git checkout v<版本>
+make web                # 构建 Web 客户端，复制到 internal/webui/dist 以便嵌入
+make build              # 产出 bin/orynd bin/orbd bin/oryn（嵌入上一步的前端）
 sudo install -m 0755 bin/orynd bin/oryn /usr/local/bin/
+scripts/fetch-core.sh   # 按 core/source.json 下载并校验 omp 到 build/core/<架构>/omp
+make image              # 构建环境镜像 oryn-orb:dev
 ```
 
-## 构建环境镜像
+`make image` 结束时会在断网容器里以非 root 用户跑冒烟测试，通过时输出 `orb 镜像离线冒烟：通过`。Docker Provider 的 `docker.image` 缺省就是 `oryn-orb:dev`。
 
-镜像构建需要 `build/core/x64/omp`，由 `scripts/fetch-core.sh` 取得：
+## 代码编辑器：VSCodium 与官方 VS Code
+
+环境桌面任务栏里的代码编辑器默认是 [VSCodium](https://vscodium.com/)：VS Code 开源代码的 MIT 许可构建，扩展市场是 Open VSX。微软官方 VS Code 的许可不允许分享或发布，所以不进公开镜像。
+
+需要官方版时（例如要用 Pylance、C/C++、Remote 这类只能在官方版里用的微软扩展），在部署机上从源码构建派生镜像，再把 Provider 的 `docker.image` 指向它：
 
 ```bash
-scripts/fetch-core.sh
-make image    # 构建环境镜像 oryn-orb:dev
+git checkout v<版本>
+BASE=ghcr.io/lynricsy/oryn-orb:<版本> make image-vscode   # 产出 oryn-orb:<版本>-vscode；不给 BASE 时取 oryn-orb:dev
 ```
 
-`make image` 结束时会在断网容器里以非 root 用户跑冒烟测试，通过时输出 `orb 镜像离线冒烟：通过`。Docker Provider 的 `docker.image` 缺省就是 `oryn-orb:dev`，见[接入 Docker Provider](/admin/install/docker-provider/)。
+派生镜像只换编辑器：`code` 改指 `/opt/vscode`，任务栏显示为 VS Code，VSCodium 仍以 `codium` 保留；构建后重跑同一份离线冒烟。派生镜像只能留在本机，不要推送到任何公开仓库。底镜像更新后（每周重建或升级版本），要重新构建派生镜像。
 
-镜像解压后约 10.2 GB，桌面应用约增加 1.1 GB（主要来自按微软更新 API 的 `sha256` 校验安装的官方 VS Code tarball）。Docker 数据盘要预留相应空间。
+## 镜像大小与内容
+
+环境镜像解压后约 9.9 GB，官方 VS Code 派生镜像在此之上再加约 1.1 GB。Docker 数据盘要预留相应空间。
 
 镜像内置应用清单 `/usr/local/share/oryn/desktop-apps.json` 与 `desktop-icons/` 图标目录。不含该清单的自定义镜像，在桌面任务栏里只有内置的 Chromium。镜像里预装了什么，见[开发镜像里有什么](/guide/environments/dev-image/)。
 
@@ -105,7 +117,7 @@ sudo install -d -m 0755 /etc/oryn
 |---|---|
 | 服务端发布包的平台 | `linux-x64`、`linux-arm64` |
 | 控制面主机的 git 版本 | ≥ 2.31 |
-| 环境镜像解压后大小 | 约 10.2 GB |
+| 环境镜像解压后大小 | 约 9.9 GB；官方 VS Code 派生镜像再加约 1.1 GB |
 
 ## 相关
 

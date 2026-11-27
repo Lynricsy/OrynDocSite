@@ -22,7 +22,7 @@ sources:
   - file: docs/deploy.md
     section: '### 升级'
     under: '## 8. 协调宿主（Space 与全局助手）'
-verified: 6fe0baf13191
+verified: dbad5aea064c
 sidebar:
   order: 1
 ---
@@ -35,14 +35,13 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## 安装 omp
 
-协调宿主用的 omp 与环境镜像是同一份发布产物。在与控制面同版本的 Oryn 源码目录里执行（检出方法见[安装二进制与镜像](/admin/install/binaries-and-image/)）：
+协调宿主用的 omp 与环境镜像里的是同一份产物，版本钉在 `core/source.json`。Release 的 Linux 发布包里已附带（见[安装二进制与镜像](/admin/install/binaries-and-image/)，解出的 `omp`）；从源码构建时用 `scripts/fetch-core.sh` 下载，它按 `core/source.json` 校验后放在 `build/core/<arch>/omp`：
 
 ```bash
-scripts/fetch-core.sh x64
-sudo install -D -m 0755 build/core/x64/omp /usr/local/lib/oryn/omp
+sudo install -D -m 0755 oryn-server_<版本>_linux-x64/omp /usr/local/lib/oryn/omp   # 从源码构建时为 build/core/x64/omp
 ```
 
-`scripts/fetch-core.sh` 按 `core/source.json` 校验后把 omp 放在 `build/core/<arch>/omp`。安装位置不放 `/usr/local/bin`，免得与主机上你自己用的 `omp` 互相遮蔽。
+安装位置不放 `/usr/local/bin`，免得与主机上你自己用的 `omp` 互相遮蔽。
 
 控制面启动时，以及每次拉起协调宿主前，都会核对 omp 的 sha256 与编进 `orynd` 的 `core/source.json` 是否一致。不一致时协调功能不可用，原因写在日志与 `GET /api/v1/coordinator` 里（`omp at … does not match core/source.json`），普通线程不受影响。本地改过 Core、确实要用自己的构建时，设 `coordinator.verify_omp: false`。
 

@@ -38,7 +38,7 @@ sources:
   - file: docs/deploy.md
     section: '## 14. Hindsight 记忆服务（M16）'
   - file: .github/workflows/release.yml
-verified: 6fe0baf13191
+verified: dbad5aea064c
 sidebar:
   order: 0
 ---
@@ -75,10 +75,10 @@ flowchart LR
 | `orynd` | 控制面单二进制：REST + WebSocket、SQLite、Passkey 与设备配对、调度、协调沙箱、出站密钥注入代理、内嵌 Web 前端 | 控制面主机，以 `oryn` 系统用户运行 |
 | `oryn` | 命令行客户端与宿主机 Provider 执行器（`docker`、`firecracker`、脚本 `dispatch`） | 你的电脑；作为 Provider 时在宿主机上 |
 | `orbd` | 环境内守护进程：出站长连接回控制面，监督 Oryn Core，托管服务、桌面与本地出站代理；`--runner` 模式接入个人机器 | 环境镜像里；Runner 模式在你自己的机器上 |
-| 环境镜像 `oryn-orb:dev` | Arch Linux 开发镜像，不随版本发布，要在同一版本的源码里用 `make image` 构建 | Docker 宿主机 |
+| 环境镜像 `oryn-orb` | Arch Linux 开发镜像，与二进制同版本发布在 GHCR（`ghcr.io/lynricsy/oryn-orb:<版本>`，多架构，每周重建）；也可在同一版本的源码里用 `make image` 构建 | Docker 宿主机 |
 | 反向代理 | 为主域名与 Portal 泛域名提供 HTTPS | 控制面主机 |
 
-服务端发布包 `oryn-server_<版本>_linux-{x64,arm64}.tar.gz` 里还有 `gemini-rerank` 与 `oryn-push-gateway`，分别是 Hindsight 的重排适配器与自建推送网关。
+服务端发布包 `oryn-server_<版本>_linux-{x64,arm64}.tar.gz` 里还有 `gemini-rerank`、`oryn-push-gateway` 与 `omp`，分别是 Hindsight 的重排适配器、自建推送网关与协调宿主用的 Oryn Core。
 
 ## 系统前提
 
@@ -87,7 +87,7 @@ flowchart LR
 | 操作系统与架构 | Linux，x86_64 或 ARM64（服务端发布包只有这两种） |
 | 容器 | Docker，供 Docker Provider 运行环境 |
 | git | 控制面主机上 2.31 或更高版本；没有时仓库浏览停用，其余功能照常 |
-| 磁盘 | 环境镜像解压后约 10.2 GB；控制面数据盘与 `oryn.db` 同盘，写满会让整个控制面停摆 |
+| 磁盘 | 环境镜像解压后约 9.9 GB（官方 VS Code 派生镜像再加约 1.1 GB）；控制面数据盘与 `oryn.db` 同盘，写满会让整个控制面停摆 |
 | 域名与证书 | 主域名（如 `oryn.example.com`）与证书，必须走 HTTPS：Passkey 的 RP ID 取 `public_url` 的主机名，桌面 App 要求服务器走 HTTPS |
 
 ## 必需与可选
@@ -121,7 +121,7 @@ flowchart LR
 
 | 顺序 | 页面 | 完成后 |
 |---|---|---|
-| 1 | [安装二进制与镜像](/admin/install/binaries-and-image/) | `orynd`、`oryn` 已安装，`oryn-orb:dev` 已构建，`oryn` 服务用户与 `/var/lib/oryn` 已创建 |
+| 1 | [安装二进制与镜像](/admin/install/binaries-and-image/) | `orynd`、`oryn` 已安装，同版本的环境镜像已拉取或构建，`oryn` 服务用户与 `/var/lib/oryn` 已创建 |
 | 2 | [配置控制面](/admin/install/control-plane/) | `/etc/oryn/orynd.yaml` 写好 |
 | 3 | [反向代理与 HTTPS](/admin/install/reverse-proxy/) | 主域名经 HTTPS 转发到 `127.0.0.1:7600` |
 | 4 | [启动与初始化](/admin/install/first-start/) | `orynd` 以 systemd 运行，你已注册 Passkey 并保存恢复码 |

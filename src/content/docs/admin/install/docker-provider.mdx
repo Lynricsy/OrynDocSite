@@ -10,7 +10,7 @@ sources:
   - file: cmd/oryn/login.go
   - file: cmd/oryn/provider.go
   - file: web/src/i18n/locales/zh-CN.json
-verified: 6fe0baf13191
+verified: dbad5aea064c
 sidebar:
   order: 5
 ---
@@ -38,7 +38,7 @@ token_file: "/etc/oryn/provider.token"
 orb_url: "http://172.17.0.1:7600"    # 注入环境的 ORYN_URL = docker0 地址 + orynd 的第二个 listen
 driver: docker
 docker:
-  image: "oryn-orb:dev"
+  image: "ghcr.io/lynricsy/oryn-orb:<版本>"   # 从源码构建时为 oryn-orb:dev；官方 VS Code 派生镜像为 oryn-orb:<版本>-vscode
   types: { small: {cpus: 2, memory: "4g"}, medium: {cpus: 4, memory: "8g"}, large: {cpus: 8, memory: "16g"} }
   default_type: medium
 ```
@@ -48,7 +48,7 @@ docker:
 | `url` | Provider 连接控制面的地址 |
 | `token_file` | 上一步写出的令牌文件 |
 | `orb_url` | 注入环境的 `ORYN_URL`，环境里的 `orbd` 用它连回控制面。写 docker0 网桥地址加 `orynd.yaml` 里 `listen` 的第二项 |
-| `docker.image` | 环境镜像，即[安装二进制与镜像](/admin/install/binaries-and-image/)里构建的 `oryn-orb:dev` |
+| `docker.image` | 环境镜像：[安装二进制与镜像](/admin/install/binaries-and-image/)里拉取的 `ghcr.io/lynricsy/oryn-orb:<版本>`；从源码构建时为 `oryn-orb:dev`（缺省值） |
 
 Provider 放在另一台主机时，`url` 与 `orb_url` 都写主域名 `https://oryn.example.com`，环境经反代建立 link。全部键见 [`provider.yaml` 配置参考](/reference/config/provider-yaml/)。
 

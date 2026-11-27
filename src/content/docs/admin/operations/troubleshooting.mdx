@@ -68,7 +68,7 @@ sources:
   - file: cmd/orynd/admin.go
   - file: cmd/oryn/orb_setup.go
   - file: cmd/oryn/provider_run.go
-verified: 6fe0baf13191
+verified: dbad5aea064c
 sidebar:
   order: 4
 ---
@@ -103,7 +103,7 @@ sidebar:
 
 | 原因（或现象） | 说明 | 处理 |
 |---|---|---|
-| `omp at … does not match core/source.json` | `coordinator.omp_path`（缺省 `/usr/local/lib/oryn/omp`）的 sha256 与编进 `orynd` 的 `core/source.json` 不一致 | 在与 `orynd` 同版本的源码里用 `scripts/fetch-core.sh` 取得 omp 并重新安装；本地改过 Core、确实要用自己的构建时，设 `coordinator.verify_omp: false` |
+| `omp at … does not match core/source.json` | `coordinator.omp_path`（缺省 `/usr/local/lib/oryn/omp`）的 sha256 与编进 `orynd` 的 `core/source.json` 不一致 | 用与 `orynd` 同版本的 Release Linux 发布包里的 `omp` 重新安装（从源码构建时用 `scripts/fetch-core.sh` 取得）；本地改过 Core、确实要用自己的构建时，设 `coordinator.verify_omp: false` |
 | `内核 Landlock ABI N < 2…` | 需要 Landlock ABI ≥ 2 | 内核 ≥ 5.19，并启用 Landlock LSM（`cat /sys/kernel/security/lsm` 里有 `landlock`） |
 | `内核 Landlock ABI N < 4 且没有网络命名空间，无法限制 TCP 出站…` | 既不能建网络命名空间，Landlock ABI 也低于 4 | 让 `orynd` 能建网络命名空间（root，或开放非特权 user namespace），或使用 ≥ 6.7 的内核 |
 | `内核 Landlock ABI N < 6、没有 PID 命名空间且沙箱与 orynd 是同一用户，无法阻止向 orynd 等同用户进程发信号…` | 没有 PID 命名空间、沙箱与 `orynd` 是同一用户，且 ABI 低于 6；Ubuntu 23.10 及以后默认的 AppArmor 会导致这种情况 | 以 root 运行 `orynd`，或放开 user namespace，或使用 ≥ 6.12 的内核 |

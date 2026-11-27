@@ -16,7 +16,8 @@ sources:
   - file: cmd/oryn/login.go
   - file: cmd/oryn/thread.go
   - file: cmd/oryn/sync.go
-verified: 6fe0baf13191
+  - file: cmd/oryn/attach.go
+verified: dbad5aea064c
 sidebar:
   order: 5
 ---
@@ -32,7 +33,7 @@ sidebar:
 | Linux x64 | `oryn-server_<版本>_linux-x64.tar.gz` |
 | Linux ARM64 | `oryn-server_<版本>_linux-arm64.tar.gz` |
 
-每个包解出一个同名目录，内含 `orynd`、`orbd`、`oryn`、`gemini-rerank`、`oryn-push-gateway` 与 `oryn-push-gateway.service`；同一 Release 里的 `oryn-server_<版本>_SHA256SUMS` 用来校验。以 Linux x64 为例：
+每个包解出一个同名目录，内含 `orynd`、`orbd`、`oryn`、`gemini-rerank`、`oryn-push-gateway`、`omp` 与 `oryn-push-gateway.service`；同一 Release 里的 `oryn-server_<版本>_SHA256SUMS` 用来校验。以 Linux x64 为例：
 
 ```bash
 sha256sum -c --ignore-missing oryn-server_<版本>_SHA256SUMS
@@ -98,7 +99,7 @@ oryn thread attach <线程>
 | 当前状态 | 输入的含义 |
 |---|---|
 | 有待答的请求 | 作答（编号或文字） |
-| 有待审批的计划 | 输入编号或选项名批准；`save <绝对路径>` 保存计划；其它文字作为修改意见发回 |
+| 有待审批的计划 | 输入编号或选项名批准；`save <路径>` 保存计划，相对路径按 Agent 的工作目录解析；其它文字作为修改意见发回 |
 | 其它 | 引导当前回合 |
 
 `/abort` 中断当前回合，`/quit` 退出。在终端上按 <kbd>Ctrl</kbd>+<kbd>C</kbd> 或输入 EOF 也会退出，Agent 继续运行。

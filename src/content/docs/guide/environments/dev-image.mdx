@@ -7,7 +7,7 @@ sources:
     section: '### 开发镜像'
   - file: README.md
     section: '## 执行环境'
-verified: 6fe0baf13191
+verified: dbad5aea064c
 sidebar:
   order: 3
 ---
@@ -36,16 +36,16 @@ sidebar:
 | 排障与数据 | `ip`/`ss`/`dig`/`nc`/`socat`/`whois`/`nmap`/`iperf3`、`lsof`/`strace`/`ltrace`/`gdb`、`htop`/`ncdu`、SQLite / PostgreSQL / MariaDB / Valkey(Redis) 客户端、DuckDB、Miller、HTTPie、`aria2`、`yt-dlp` |
 | 文档与媒体 | Pandoc、LibreOffice（`soffice --headless`）、Poppler/`qpdf`/Ghostscript/MuPDF/`img2pdf`、Tesseract OCR（英文、简繁中文）、ImageMagick、librsvg、WebP/AVIF/JPEG XL/HEIF 编解码、`optipng`/`pngquant`/`jpegoptim`/`gifsicle`、ExifTool、Graphviz、`qrencode`/`zbar`、FFmpeg、SoX、MediaInfo |
 | Python 库 | 系统 Python 可直接 `import`：numpy、pandas、scipy、matplotlib、Pillow、requests、BeautifulSoup、lxml、PyYAML、openpyxl、XlsxWriter、python-docx、pypdf、ReportLab |
-| 图形桌面 | TigerVNC (`Xvnc`)、Openbox、session D-Bus 与 AT-SPI 无障碍总线、受管策略加固的 Chromium、VS Code（微软官方版）、终端（`xfce4-terminal`）、文件管理器（`pcmanfm`）、文本编辑器（`mousepad`）、LibreOffice、中英文与彩色 Emoji 字体；等宽字体默认为 [JetBrains Maple Mono](https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono)（中英文 2:1 对齐、带 Nerd Font 字形、无连字） |
+| 图形桌面 | TigerVNC (`Xvnc`)、Openbox、session D-Bus 与 AT-SPI 无障碍总线、受管策略加固的 Chromium、代码编辑器 VSCodium（部署方可在本机换成微软官方 VS Code）、终端（`xfce4-terminal`）、文件管理器（`pcmanfm`）、文本编辑器（`mousepad`）、LibreOffice、中英文与彩色 Emoji 字体；等宽字体默认为 [JetBrains Maple Mono](https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono)（中英文 2:1 对齐、带 Nerd Font 字形、无连字） |
 
-ShellCheck、Pandoc、rust-analyzer、marksman、phpactor、JetBrains Maple Mono 从上游 GitHub 发行版安装（ARM 仓库缺包，双架构统一来源）。VS Code 按微软更新 API 的 `sha256` 校验安装官方 tarball。
+ShellCheck、Pandoc、rust-analyzer、marksman、phpactor、VSCodium、JetBrains Maple Mono 从上游 GitHub 发行版安装（ARM 仓库缺包，双架构统一来源）。`code` 与 `codium` 都指向 VSCodium。公开镜像不内置微软官方 VS Code（许可不允许再分发）；部署方在本机构建的派生镜像里，`code` 改指官方版，见[安装二进制与镜像](/admin/install/binaries-and-image/)。
 
 ## 清单文件
 
 | 路径 | 内容 |
 |---|---|
 | `/usr/local/share/oryn/packages.txt` | 系统软件包 |
-| `/usr/local/share/oryn/upstream-versions.txt` | 从上游发行版安装的工具与 VS Code 的版本 |
+| `/usr/local/share/oryn/upstream-versions.txt` | 从上游发行版安装的工具的版本 |
 | `/usr/local/share/oryn/desktop-apps.json` | 桌面任务栏的应用清单 |
 | `/usr/local/share/oryn/desktop-icons/` | 任务栏图标，取自镜像内各应用自带的文件 |
 

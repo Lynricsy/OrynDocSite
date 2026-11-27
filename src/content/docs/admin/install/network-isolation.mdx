@@ -11,7 +11,7 @@ sources:
     section: '### 桌面浏览器沙箱（M8）'
   - file: docs/deploy.md
     section: '### 网络隔离'
-verified: 6fe0baf13191
+verified: dbad5aea064c
 sidebar:
   order: 7
 ---
@@ -95,21 +95,21 @@ Docker 驱动默认给每个环境加 `--cap-drop NET_RAW --cap-drop NET_ADMIN`�
 
 ## 了解浏览器沙箱
 
-环境里的 Chromium 与 VS Code 需要建 user namespace 才能带沙箱运行。
+环境里的 Chromium 与代码编辑器需要建 user namespace 才能带沙箱运行。
 
 - Docker 驱动给新容器加 `--security-opt seccomp=<orb-seccomp.json>`（仓库里的 `internal/providerrt/orb-seccomp.json`）：在 moby 默认配置末尾追加一条规则，放行 `clone` / `unshare` 建 user namespace，供 Chromium 自己的沙箱使用；mount、setns、clone3 仍按默认只给有 `CAP_SYS_ADMIN` 的进程。`extra_run_args` 里自带 `seccomp` 选项时不追加。代价是环境内进程能建 user namespace，内核暴露面略增，与 Chrome 官方推荐的容器配置相同。
-- 环境里的 `orbd` 启动时探测能否建 user namespace：能，则 Chromium 与 VS Code 带沙箱运行；不能（升级前建的旧容器、dispatch 驱动的机器），都退回 `--no-sandbox`，Chromium 保留警告条。只有新建的环境才有沙箱。
+- 环境里的 `orbd` 启动时探测能否建 user namespace：能，则 Chromium 与代码编辑器带沙箱运行；不能（升级前建的旧容器、dispatch 驱动的机器），都退回 `--no-sandbox`，Chromium 保留警告条。只有新建的环境才有沙箱。
 - 镜像里的受管策略 `/etc/chromium/policies/managed/oryn.json`（root 所有，不随 Profile 传播）禁止安装扩展、把代理固定为直连，防止被注入的 Agent 往共享 Profile 里植入扩展或代理。
 
-## 定期重建镜像
+## 定期更新镜像
 
-Chromium 与 VS Code 随环境镜像发布。要定期重建镜像以跟进安全更新：
+Chromium 与代码编辑器随环境镜像发布，要定期更新环境镜像以跟进安全更新：
 
-```bash
-make image
-```
+- 用 GHCR 镜像时，定期重新 `docker pull` 同一标签（每周重建）。
+- 从源码构建时，重跑 `make image`。
+- 用官方 VS Code 派生镜像时，在上面任一步之后重跑 `make image-vscode`。
 
-已存在的环境用的仍是旧镜像。构建方法见[安装二进制与镜像](/admin/install/binaries-and-image/)。
+已存在的环境用的仍是旧镜像。各条命令见[安装二进制与镜像](/admin/install/binaries-and-image/)。
 
 ## 限制
 
