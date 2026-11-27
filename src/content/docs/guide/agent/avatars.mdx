@@ -1,0 +1,86 @@
+---
+title: 头像与身份
+description: 为默认 Agent 身份、全局助手、角色、子 Agent 与项目设置头像或图标，并在选图弹层里查找图标与 emoji。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### 头像'
+  - file: docs/features.md
+    section: '### 项目'
+  - file: web/src/components/settings/AvatarEditor.tsx
+  - file: web/src/pages/settings/agent/RolesPage.tsx
+  - file: web/src/pages/settings/agent/SubagentsPage.tsx
+  - file: web/src/pages/settings/AssistantSettings.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 7
+---
+
+import Shot from '@/components/Shot.astro';
+
+头像显示在回合头、子 Agent 列表、task 卡片与分享页上。内置角色与内置 Agent 自带默认的 Nerd 字形，你可以换成自己的。
+
+## 了解哪些对象能设头像
+
+| 对象 | 在哪里设置 |
+|---|---|
+| 默认 Agent 身份 | 「设置 → 助手与 Agent → 模型与角色」顶部的「默认 Agent 身份」 |
+| 全局助手 | 「设置 → 助手与 Agent → 全局助手」 |
+| 每个角色（含内置角色与不在轮换里的角色） | 「模型与角色」里角色行的「设置」对话框，见[模型角色与思考档位](/guide/agent/roles/) |
+| 每个子 Agent | 「子 agent」里子 Agent 行的「设置」对话框，见[子 Agent](/guide/agent/subagents/) |
+| 项目图标 | 项目设置的「概览」分组 |
+
+「默认 Agent 身份」是普通对话里回合头默认显示的名字与头像：没切到角色、或切到没设头像的自定义角色时显示它。全局助手的名字与头像显示在底栏的助手标签和助手对话的每个回合头上，切到角色也不变。
+
+## 设置头像
+
+头像编辑区有三种方式：
+
+- 「上传图片」：选择图片后先进入裁剪对话框。
+- 「内置图标」：打开选图弹层，见下一节。
+- 「自定义（单个 emoji 或 Nerd 字形）」：粘贴一个字符后点「使用」。
+
+要撤掉自定义头像，在默认 Agent 身份与全局助手里点「恢复默认」，在角色与子 Agent 里点「清除头像」。
+
+## 在选图弹层里查找图标
+
+头像与项目图标共用一个选择弹层，点图标打开；头像的入口是「内置图标」按钮。
+
+<Shot id="site/avatar-picker" alt="选图弹层的「表情符号」页：顶部是搜索框，下面是「常用」精选和「笑脸与情感」分类的 emoji" />
+
+弹层分两页：
+
+| 页 | 收录 |
+|---|---|
+| 「图标」 | Nerd Font 的开发品牌与语言、Linux 发行版和 Material Design 全集，约 7500 个 |
+| 「表情符号」 | Unicode 15.1 的全部 emoji，不含肤色变体 |
+
+每页顶部是「常用」精选。完整目录在第一次打开弹层时才加载。
+
+搜索为模糊匹配：
+
+- 可以输入多个词，也可以用按序缩写，例如 `lang ts`。
+- emoji 还可以用中文名和关键词搜。
+
+项目图标弹层右上角的「自动」清除手选的图标。
+
+## 看懂子 Agent 头像上的光环
+
+子 Agent 总览、详情与 task 卡片用头像加光环动效区分运行、排队、完成、失败与仅存转录。状态说明见[子 Agent](/guide/agent/subagents/#读懂状态光环)。
+
+## 了解分享页带出哪些头像
+
+公开分享页只带出分享范围内实际用到的 Agent 头像。分享的创建与撤销见[公开分享线程](/guide/threads/sharing/)。
+
+## 限制
+
+- 「图标」页约 7500 个图标；「表情符号」页收录 Unicode 15.1，不含肤色变体。
+- 自定义头像只接受单个 emoji 或 Nerd 字形。
+
+## 相关
+
+- [模型角色与思考档位](/guide/agent/roles/)
+- [子 Agent](/guide/agent/subagents/)
+- [认识全局助手](/guide/assistant/overview/)
+- [创建与管理项目](/guide/projects/manage/)

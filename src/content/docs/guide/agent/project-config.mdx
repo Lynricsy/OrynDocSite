@@ -1,0 +1,91 @@
+---
+title: 项目级 Agent 配置
+description: 为单个项目保存规则、技能、子 Agent、MCP 等 Agent 配置，了解它与仓库 .omp/ 和全局配置的优先级，以及上传限制。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### 项目级中央配置'
+  - file: docs/features.md
+    section: '### 项目'
+  - file: cmd/oryn/config.go
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 6
+---
+
+除了全局 omp 配置，每个项目在控制面还有一层自己的 Agent 配置，只对这个项目的执行环境（orb）生效。这一层保存在控制面，不写进仓库。
+
+## 了解能放什么
+
+目录结构与仓库里的 `.omp/` 相同，可以放：
+
+- 规则（`rules/`）、技能（`skills/`）、子 Agent（`agents/`）、命令、提示片段（`prompts/`）
+- 扩展、hook、工具
+- `mcp.json`、`config.yml` 与 `AGENTS.md`
+
+`models.yml` 只能放在全局层：模型与密钥只在全局管理，见[模型与密钥](/guide/agent/models-and-keys/)。
+
+## 了解优先级与生效方式
+
+同名条目的优先级是：
+
+1. 项目层
+2. 仓库里的 `.omp/`
+3. 全局
+
+`AGENTS.md` 例外：项目层的与仓库里的并存。
+
+每次 setup 与 resume 时，这一层原样镜像到环境里的 `~/.oryn/project-config/.omp/`，不写进仓库工作区，`git status` 保持干净。所以改动对新环境与下次唤醒生效。
+
+## 在网页上编辑
+
+打开项目设置的「Agent」分组。这里有项目级 Agent 配置的文件编辑，以及项目记忆开关（见[记忆](/guide/agent/memory/)）。
+
+不要把令牌直接写进文件：在「密钥」里建一个环境变量模式的密钥，然后在 `mcp.json` 里写 `${变量名}`。项目级密钥见[密钥与环境变量](/guide/projects/secrets/)。
+
+## 从本机目录上传
+
+```bash
+oryn config push --project <项目名或 id>
+```
+
+目录参数省略时，上传当前目录下的 `.omp`，整体替换该项目的 Agent 配置。
+
+- 不收 `models.yml` 与 `plans/`。
+- 与全局推送相同的排除规则：默认排除 `sessions/` `blobs/` `cache/` `logs/` `natives/` `terminal-sessions/` `*.db` `*.db-*` `auth.json` `history*`，另可用 `--exclude <glob>`（可重复）和目录里的 `.orynignore`。
+- 只收普通文件；`rules/` 下的文件与 `*.md` `*.yml` `*.yaml` `*.json` 必须是 UTF-8 文本，含 NUL 或非 UTF-8 字节时拒绝上传。
+
+为防止不可信仓库借符号链接把本机文件（如 `~/.ssh`）传上去，项目推送拒绝以下情况：推送目录本身是符号链接，或其中有指向目录外、无法解析、指向被排除路径的链接。`--exclude` 与 `.orynignore` 同时按链接名和真实路径匹配。
+
+## 下载到本机
+
+```bash
+oryn config pull --project <项目名或 id>
+```
+
+目录参数省略时，下载到当前目录下的 `.omp`，不删除本地多出的文件。项目级配置没有 `models.yml`，`--force` 不起作用。加 `--dry-run` 只列出将写入的文件。
+
+## 用 /omfg 写入项目规则
+
+线程里执行 `/omfg` 后，选「本项目（Oryn 项目配置）」，生成的规则写进这一层。细节见[技能、规则与指令](/guide/agent/instructions/#用-omfg-把纠错写成规则)。
+
+## 删除项目时
+
+删除项目会一并删除它的 Agent 配置。
+
+## 限制
+
+| 项 | 上限 |
+|---|---|
+| 项目推送的单个文件 | 1 MiB |
+| 项目推送的合计大小 | 16 MiB |
+| 项目推送的文件数 | 2000 |
+| 全局与项目两层合计的下发编码 | 88 MiB，超过时写入返回 413 |
+
+## 相关
+
+- [技能、规则与指令](/guide/agent/instructions/)
+- [扩展、工具与 MCP](/guide/agent/extensions-mcp/)
+- [创建与管理项目](/guide/projects/manage/)
+- [`oryn config` 命令参考](/reference/cli/config/)

@@ -1,0 +1,75 @@
+---
+title: 扩展、工具与 MCP
+description: 管理扩展模块、hook 与自定义工具，安排会话在空闲时重启，配置 MCP 服务器，以及开关生成式 UI。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### 图形化配置，保存即生效'
+  - file: docs/features.md
+    section: '### 项目级中央配置'
+  - file: docs/features.md
+    section: '### 全局助手'
+  - file: docs/features.md
+    section: '## 视图'
+  - file: web/src/pages/settings/agent/ExtensionsPage.tsx
+  - file: web/src/pages/settings/registry.ts
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 5
+---
+
+扩展模块、hook 和自定义工具是给 Agent 加能力的代码文件，MCP 服务器把外部工具接进来。前三者在「设置 → 助手与 Agent → 扩展与工具」管理，改动下发到执行环境（orb），不作用于全局助手；和技能、规则不同，它们要重启会话才生效。
+
+## 管理扩展模块、hook 与自定义工具
+
+「扩展与工具」页每类一组，可以新建、编辑源码、删除和启停：
+
+| 组 | 放在哪里 |
+|---|---|
+| 「扩展模块」 | `extensions/` 下的 `.ts`、`.js` 文件，或带 `index.ts`、`package.json` 的子目录 |
+| 「Hook」 | `hooks/pre` 与 `hooks/post` 下的文件；文件名去掉扩展名是要拦截的工具，`*` 表示所有工具 |
+| 「自定义工具」 | `tools/` 下的 `.ts`、`.js`、`.sh`、`.bash`、`.py`、`.md`、`.json` 文件，或带 `index.ts` 的子目录 |
+
+新建时：
+
+- 扩展模块的文件名以 `.ts` 或 `.js` 结尾，如 `my-extension.ts`。
+- Hook 先选「时机」：「pre：工具调用前」或「post：工具调用后」；文件名是工具名加扩展名，如 `bash.ts`，`*.ts` 拦截所有工具。
+- 自定义工具的文件名以 `.ts`、`.js`、`.sh`、`.bash`、`.py`、`.md` 或 `.json` 结尾。
+
+不会被加载的条目在列表里标出「不会加载」。启停写入 `config.yml` 的 `disabledExtensions`。
+
+## 让改动生效
+
+保存后，改动数秒内下发到所有运行中的环境，但扩展、hook 与自定义工具在会话重启后才生效。页面顶部列出需要重启的会话与原因：
+
+1. 点「重启这些会话」。
+2. 页面显示「已安排重启」：各会话空闲时重启，正在跑的回合不受影响。
+3. 下次你在这些线程里发消息时，会话带着原会话自动拉起。
+
+没下发成功的环境会在下次启动或恢复时拿到最新配置。
+
+## 配置 MCP 服务器
+
+MCP 服务器写在 omp 配置的 `mcp.json` 里，有两层：
+
+- 全局：全局 omp 配置的 `mcp.json`。在「设置 → 助手与 Agent → 配置文件」里编辑，或在本机改好后用 `oryn config push` 上传，见[模型与密钥](/guide/agent/models-and-keys/)。
+- 项目：项目 Agent 配置里的 `mcp.json`，只对本项目的环境生效，见[项目级 Agent 配置](/guide/agent/project-config/)。不要把令牌直接写进项目的 `mcp.json`：在「密钥」里建一个环境变量模式（`env`）的密钥，然后在 `mcp.json` 里写 `${变量名}`。
+
+MCP 的改动在会话空闲时热重载，不需要重启会话。
+
+## 开关生成式 UI
+
+「扩展与工具」页的「生成式 UI」组有一个开关「在对话里给出视图」，缺省开启。开着时，Agent 可以用可交互的视图（表单、按钮、图表等）回答。
+
+- 关闭后，新启动的 Agent 不注册视图工具，系统提示里也没有视图指引；已有的视图照常显示。
+- 工作线程在下次 Agent 启动时生效，全局助手的对话在静止后重启生效。
+- 两个视图工具的定义与指引约 4.7k token，每个请求都带（走提示缓存）。
+
+视图本身见[视图：对话里的交互界面](/guide/artifacts/views/)。
+
+## 相关
+
+- [技能、规则与指令](/guide/agent/instructions/)
+- [项目级 Agent 配置](/guide/agent/project-config/)
+- [助手联网、MCP 与后台研究](/admin/components/assistant-network/)

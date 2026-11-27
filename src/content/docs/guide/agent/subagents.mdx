@@ -1,0 +1,86 @@
+---
+title: 子 Agent
+description: 启停内置与自定义子 Agent、为它们覆盖模型，并在线程里查看派发出去的子 Agent 及其状态。
+type: how-to
+sources:
+  - file: web/src/pages/settings/agent/SubagentsPage.tsx
+  - file: web/src/lib/slash.ts
+  - file: web/src/i18n/locales/zh-CN.json
+  - file: docs/features.md
+    section: '### 头像'
+  - file: docs/features.md
+    section: '### 工程面板'
+verified: 6fe0baf13191
+sidebar:
+  order: 4
+---
+
+线程里的 Agent 可以把一部分工作派给子 Agent。「设置 → 助手与 Agent → 子 agent」管理有哪些子 Agent 可派、各用什么模型；这一页的改动下发到执行环境（orb），不作用于全局助手。
+
+## 启停内置子 Agent
+
+「内置 agent」组列出 omp 自带的子 Agent。它们的定义不可修改，可以停用、改模型或换头像。
+
+| 名称 | 界面上的说明 |
+|---|---|
+| `task` | 通用子 agent，能力完整，适合委派多步任务。 |
+| `sonic` | 低推理档位，只做机械性改动或收集数据。 |
+| `scout` | 快速侦察：探索代码库、分析代码、大范围搜索，返回压缩后的上下文。 |
+| `reviewer` | 代码评审，关注质量与安全。 |
+| `security-reviewer` | 只读的安全评审，基于证据查找仓库漏洞。 |
+| `seance` | 读取历史会话及其嵌套记录，回答相关问题。 |
+| `advisor` | 顾问运行时：旁听每个回合并插入建议。 |
+
+每行行尾的开关启停该子 Agent，写入 `config.yml` 的 `task.disabledAgents`。
+
+## 覆盖子 Agent 的模型
+
+在子 Agent 所在行点「设置」，对话框里有两项：
+
+- 「模型覆盖」：写入 `config.yml` 的 `task.agentModelOverrides`，优先于 Agent 自己的 `model`；可填多个，按顺序回退。
+- 「头像」：见[头像与身份](/guide/agent/avatars/)。
+
+设了覆盖的行显示「模型覆盖：」及所填模型。内置与自定义子 Agent 都可以覆盖。
+
+## 新建自定义子 Agent
+
+「自定义 agent」组里每个 Agent 是 `agents/<名称>.md`，需要同时有名称和描述才会加载。点「新建」打开表单：
+
+| 字段 | 说明 |
+|---|---|
+| 「名称」 | 以字母或数字开头，可含字母、数字和 `.` `_` `-`，最长 64 个字符；`main` 与 `sub` 是保留名称 |
+| 「描述」 | 必填，写清楚什么时候派给它 |
+| 「模型」 | 可填多个，按顺序回退；`@role` 引用角色模型，如 `@smol` |
+| 「思考档位」 | 可选「不设置」或任一思考档位 |
+| 「工具」 | 逗号分隔的工具名，如 `read, grep`；留空使用默认工具 |
+| 「可派生」 | 它能再派出的 Agent，逗号分隔；`*` 表示全部，留空表示不能派生 |
+| 「自动加载技能」 | 启动时就读入的技能名，逗号分隔 |
+| 「阻塞运行」 | 派出后等它完成再继续，不在后台运行 |
+| 「顾问」 | 运行时请顾问模型把关：「不启用」「启用（默认模型）」或「启用（指定模型）」 |
+| 「预走」 | 先用强模型规划，到第一次修改时交给更快的模型继续；选项同「顾问」 |
+| 「系统提示词」 | 文件正文 |
+
+表单里没有列出的 frontmatter 键原样保留。frontmatter 无法解析时，表单改为整份原文编辑。缺少名称或描述的条目在列表里标出「缺少名称，不会加载」或「缺少描述，不会加载」。
+
+定义被删除或改名后，原来设过的头像留在「遗留头像」组，可以清除。
+
+## 在线程里查看子 Agent
+
+- 右侧「信息」面板的子 Agent 派发树列出本线程派出的子 Agent，见[信息面板](/guide/workbench/info-panel/)。
+- 在输入框执行 `/agents`（别名 `/hub`、`/subagents`）直接打开信息面板里的子 Agent 卡。
+- 子 Agent 的状态显示为「运行中」「排队中」「已完成」「失败」或「已中止」。
+
+## 读懂状态光环
+
+子 Agent 总览、详情与 task 卡片用头像加光环动效区分运行、排队、完成、失败与仅存转录。仅存转录指 Agent 已不在运行，界面显示的是已保存的转录。
+
+## 限制
+
+- 子 Agent 名称最长 64 个字符；`main` 与 `sub` 不能用作名称。
+
+## 相关
+
+- [模型角色与思考档位](/guide/agent/roles/)
+- [技能、规则与指令](/guide/agent/instructions/)
+- [头像与身份](/guide/agent/avatars/)
+- [信息面板](/guide/workbench/info-panel/)

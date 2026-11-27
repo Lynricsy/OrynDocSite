@@ -1,0 +1,105 @@
+---
+title: 记忆
+description: 了解 Agent 记忆怎样写入、召回与按项目隔离，并在记忆管理页审核全局记忆、浏览、遗忘与导出。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### Hindsight 记忆'
+  - file: docs/features.md
+    section: '### 项目'
+  - file: web/src/pages/settings/agent/MemoryPage.tsx
+  - file: web/src/pages/settings/agent/memory/BrowseCard.tsx
+  - file: web/src/pages/settings/agent/memory/GlobalCard.tsx
+  - file: web/src/pages/settings/agent/memory/CandidatesCard.tsx
+  - file: web/src/pages/settings/agent/memory/MentalModelsCard.tsx
+  - file: web/src/pages/settings/agent/memory/ToggleCard.tsx
+  - file: web/src/pages/settings/agent/memory/ExportCard.tsx
+  - file: web/src/pages/settings/registry.ts
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 8
+---
+
+import Shot from '@/components/Shot.astro';
+import Requires from '@/components/Requires.astro';
+
+<Requires ids={['hindsight']} />
+
+执行环境（orb）与 Runner 里的 Agent 共用一个自托管的 [Hindsight](https://github.com/vectorize-io/hindsight) 记忆库：回合结束时自动写入，下一轮自动召回。Hindsight 自己调用的模型、嵌入与重排全部经控制面中转。
+
+这套记忆不作用于全局助手。全局助手关于你的长期记忆是另一套，见[主人记忆](/guide/assistant/owner-memory/)。
+
+## 了解记忆怎样隔离
+
+- 控制面的记忆网关替 Agent 填写项目标签：同一项目的各个线程共享记忆，不同项目互不可见。
+- 全局记忆所有项目都能召回，无项目的线程也能召回。
+- 写进全局层的内容（个人偏好、跨项目经验）先进「待批准」队列，你批准后才对所有项目生效。
+
+## 打开记忆管理页
+
+记忆的管理页在「设置 → 助手与 Agent → 记忆」。页面自上而下分组：
+
+| 分组 | 用途 |
+|---|---|
+| 「状态」 | Hindsight 是否正常、版本、记忆数、待批准数、删除待重试数 |
+| 「连接」 | 「启用记忆（总开关）」、Hindsight 地址、生成 `.env` |
+| 「项目」 | 每个未归档项目一行记忆开关 |
+| 「模型」 | Hindsight 自己调用的模型 |
+| 「嵌入与重排」 | 嵌入接口与可选的重排接口 |
+| 「浏览」 | 按项目浏览、搜索、删除与按线程遗忘 |
+| 「全局记忆」 | 新建、改写、删除全局记忆 |
+| 「待批准」 | 审核进入全局层的候选 |
+| 「Mental models」 | 查看与刷新 mental model |
+| 「用量」 | 记忆服务经控制面中转的调用量 |
+| 「导出」 | 导出全部记忆为归档文件 |
+
+「连接」「模型」「嵌入与重排」属于部署配置，见 [Hindsight 记忆服务](/admin/components/hindsight/)。
+
+<Shot id="site/memory" alt="记忆管理页的上半部分：「状态」分组显示 Hindsight 正常、版本、记忆数与待批准数，「连接」分组有总开关、.env 与 Hindsight 地址，「项目」分组有一个跟随总开关的项目" />
+
+## 为单个项目开关记忆
+
+「项目」分组里每个未归档项目一行开关，没单独设置过的标为「跟随总开关」。关闭后，该项目新启动的 Agent 不再启用记忆，其他项目不受影响。项目设置的「Agent」分组里也有项目记忆开关。
+
+记忆开关的改动对新启动的 Agent 生效；运行中需要重启的会话列在页面顶部。
+
+## 审核全局记忆
+
+Agent 提议的全局记忆，以及无项目线程写入的记忆，先放进「待批准」，不进 Hindsight。对每一条，你可以：
+
+- 「批准」：立即成为全局记忆。
+- 「改写后批准」：先修改内容，再批准。
+- 「拒绝」：直接删除。
+
+「全局记忆」分组里可以直接「新建」、改写或删除全局记忆，不经过审核。每次新建或改写后，控制面自动刷新全局的 user-preferences mental model。
+
+## 浏览、搜索与遗忘
+
+在「浏览」分组里选一个项目：
+
+- 记忆按更新时间倒序分页列出，每条标出来源线程。
+- 输入关键词点「搜索」，按关键词召回，结果含全局记忆。
+- 删除单条记忆，或点「按线程遗忘」删除某个线程写入的全部记忆。删除都要两步确认。
+
+删除失败的条目进入重试队列，控制面自动重试；「状态」分组的「删除待重试」显示数量。
+
+## 刷新 mental model
+
+「Mental models」分组按项目或全局列出 mental model。点「刷新」后是异步执行，提交后稍等再看内容。全局的 user-preferences 由控制面维护，只从已批准的全局记忆中提炼。
+
+## 查看用量与导出
+
+- 「用量」分组按用途列出 24 小时与 7 天内的调用次数与输入、输出 token。
+- 「导出」分组的「导出 bank」把全部记忆导出为归档文件，完成后点「下载归档」。这是按需导出；定时整库备份见[备份](/admin/operations/backup/)。
+
+## 删除项目时
+
+删除项目时，它的记忆一并删除。
+
+## 相关
+
+- [Hindsight 记忆服务](/admin/components/hindsight/)
+- [主人记忆](/guide/assistant/owner-memory/)
+- [项目级 Agent 配置](/guide/agent/project-config/)
+- [创建与管理项目](/guide/projects/manage/)
