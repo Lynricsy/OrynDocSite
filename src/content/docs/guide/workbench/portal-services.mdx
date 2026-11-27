@@ -1,0 +1,135 @@
+---
+title: 受管服务与 Portal 预览
+description: 在 .oryn/services.yaml 里声明开发服务器，由环境托管运行，并经 Portal 地址在浏览器里预览或限时公开。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### 工程面板'
+  - file: docs/deploy.md
+    section: '## Portal（受管服务的浏览器入口）'
+  - file: docs/protocol.md
+    section: '## M4：Portal 与受管服务'
+  - file: internal/orbdrt/servicefile.go
+  - file: internal/orbdrt/services.go
+  - file: cmd/oryn/orb_service.go
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 5
+---
+
+import Requires from '@/components/Requires.astro';
+
+受管服务是执行环境（orb）里由 `orbd` 监督运行的进程，通常是开发服务器：退出后自动拉起，日志集中保存。给服务开了 Portal 之后，你能在线程右侧的「Portal」页或单独的浏览器标签里打开它，也可以把某个端口限时公开给别人看。
+
+<Requires ids={['portal']} />
+
+管理员没有配置 `portal_domain` 时，「Portal」页显示「Portal 未启用」，服务照常运行，只是不能从浏览器访问。
+
+## 在仓库里声明服务
+
+在工作区根目录的 `.oryn/services.yaml` 里声明服务。环境在 `setup` / `resume` 结束时按它确保全部服务运行。下面是一个最小示例，在自动分配的端口上起一个静态文件服务器并开 Portal：
+
+```yaml
+services:
+  web:
+    command: python3 -m http.server "$PORT"
+    portal: true
+```
+
+- 键名 `web` 是服务名，须匹配 `^[a-z0-9][a-z0-9-]{0,31}$`。
+- `command` 必填，以 `bash -lc` 运行，应监听环境变量 `PORT` 给出的端口。
+- 省略 `port` 时由 `orbd` 在 20000–29999 之间自动分配端口，分配结果按服务名保存，跨重启不变。
+- `portal: true` 为这个服务开 Portal；也可以写成以 `/` 开头的路径，Portal 链接指向这个路径。
+
+`cwd`、`env`、`health`、`portals`、`platforms` 等其余字段，以及进程里能读到的 `PORT`、`PUBLIC_URL`、`ORYN_THREAD_ID`，见 [`.oryn/services.yaml` 参考](/reference/project-files/services-yaml/)。
+
+文件放在 `.oryn/services.yaml`；仓库里没有它而有 `.amp/services.yaml` 时用后者，两份不合并。
+
+## 在环境里启动、停止与查看服务
+
+在环境里（线程的终端，或让 Agent 执行）用 `oryn orb service` 管理服务：
+
+```bash
+# 按 services.yaml 确保全部服务运行
+oryn orb service start
+
+# 列出受管服务
+oryn orb service ls
+
+# 重读 services.yaml 后重启某个服务
+oryn orb service restart web
+
+# 查看日志末尾，-f 持续输出
+oryn orb service logs web -f
+
+# 停止服务；停止后不再自动拉起
+oryn orb service stop web
+```
+
+不改仓库也可以起一个临时服务。`--portal` 会打印可从浏览器访问的地址；`stop --remove` 同时删除临时服务的定义与端口分配：
+
+```bash
+oryn orb service start preview --command 'python3 -m http.server "$PORT"' --portal
+oryn orb service stop preview --remove
+```
+
+全部参数见 [`oryn orb`](/reference/cli/orb/)。服务日志写在环境内的 `$HOME/.cache/oryn/logs/services/<服务名>.log`。
+
+## 打开 Portal 地址
+
+开了 Portal 的服务经下面的地址访问，`<线程短码>` 取自线程 id，`<portal_domain>` 是管理员配置的泛域名：
+
+```text
+https://t-<线程短码>-p<端口>.<portal_domain>/
+```
+
+例如管理员配置了 `orb.example.com`，地址形如 `https://t-<线程短码>-p8080.orb.example.com/`。Portal 地址沿用 Oryn 主域名的协议与端口。
+
+线程右侧的「Portal」页把它内嵌显示，工具条上有「后退」「前进」「刷新」、路径、服务声明的「链接」、「复制链接」与「在新窗口打开」。主域名与 Portal 域名不在同一注册域时，部分浏览器会拦截内嵌页的 Cookie，此时页面给出「在新窗口打开」的链接。
+
+打开 Portal 地址算一次用户交互：环境冻结或停机时，浏览器先看到「正在唤醒」过渡页并自动刷新，其它请求最多等待 25 秒。开着 Portal 页面（例如开发服务器的热更新连接或轮询）会让环境保持唤醒。
+
+## 控制谁能访问
+
+Portal 默认只有你能打开：网页登录会话经一次性码换取 Portal 的 Cookie，CLI 与 App 直接带设备令牌。应用可以读请求头 `X-Oryn-Authenticated: owner=yes|no` 区分访问者是不是你。
+
+要给别人看效果时，在「Portal」页点「访问权限」，按端口「限时公开」：
+
+1. 选择时长：「1 小时」「3 小时」「1 天」「7 天」。
+2. 在确认框里点「确认公开」。之后任何拿到链接的人都能访问这个端口，无需登录；其它端口与线程本身仍只有你能访问。
+3. 公开期间可以「续期（从现在起算）」，或点「终止公开」。
+
+到期或终止时，匿名连接立即断开。
+
+## 处理服务故障
+
+服务的状态有「启动中」「运行中」「未就绪」「等待重启」「已停止」「失败」：
+
+| 状态 | 含义 |
+|---|---|
+| 「未就绪」 | 启动后 60 秒仍未通过就绪探测；之后继续每 5 秒探测一次 |
+| 「等待重启」 | 进程退出，等待自动重启 |
+| 「失败」 | 定义无效、端口冲突、端口留给了出站代理，或连续 5 次存活不到 60 秒 |
+
+服务故障时，在[信息面板](/guide/workbench/info-panel/)展开「服务」行，点「重启」；行内依次显示「重启中…」与「已恢复」或「仍然失败」。在环境里对应的命令是 `oryn orb service restart <服务名>`。
+
+查看原因：「服务」行里每个服务都能打开日志，网页上每 3 秒自动刷新；在环境里用 `oryn orb service logs <服务名>`。端口问题按界面提示处理：
+
+- 「端口已被其它服务占用」：在 `.oryn/services.yaml` 里给它换一个端口（或删掉 `port` 行让 `orbd` 自动分配），再重启它；临时服务用 `oryn orb service start <服务名>` 换一个 `--port` 重新启动（或不带 `--port`）。
+- 「端口留给了 orbd 的出站代理」：换用其它端口。
+
+## 限制
+
+- 每台环境最多 32 个服务（文件里声明的与临时服务合计）。
+- 服务名：小写字母、数字与 `-`，以字母或数字开头，最长 32 个字符。
+- Portal 链接的标题与分组名不超过 80 个字符，路径不超过 512 字节。
+- 限时公开的时长只有 1 小时、3 小时、1 天、7 天四档。
+- Portal 等待唤醒的请求最多等 25 秒。
+
+## 相关
+
+- [`.oryn/services.yaml` 参考](/reference/project-files/services-yaml/)
+- [启用 Portal 泛域名](/admin/install/portal/)
+- [信息面板](/guide/workbench/info-panel/)
+- [环境配置：setup、resume、快照与预热](/guide/projects/environment/)

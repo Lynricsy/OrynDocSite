@@ -1,0 +1,73 @@
+---
+title: 文件面板与预览
+description: 在「文件」页浏览与编辑环境里的文件，按格式在浏览器内预览，环境停机时只读浏览。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### 文件预览'
+  - file: docs/features.md
+    section: '### 冻结、唤醒与停机'
+  - file: docs/features.md
+    section: '### 右键菜单与选区动作'
+  - file: README.md
+    section: '## 工作台'
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 3
+---
+
+import Shot from '@/components/Shot.astro';
+
+「文件」页由文件树、编辑器与浏览器内预览组成，用来查看和修改执行环境（orb）里的文件。预览在浏览器本地完成，不需要下载，也不经第三方服务。
+
+<Shot id="readme/file-preview" alt="两个文件面板并排：左边在面板内预览一份 PDF 报告，右边预览一个带代码、表格输出与柱状图的 Jupyter Notebook" />
+
+## 选择要浏览的目录
+
+文件树顶部可以在几个根目录间切换：「工作区」「主目录」「项目 Agent 配置」「Agent 配置」等。在「Agent 配置」里保存的修改对新环境与下次唤醒生效。
+
+## 管理文件
+
+文件树的工具按钮与每项的菜单提供「新建文件」「新建文件夹」「上传」「重命名」「删除」「下载」「复制路径」「刷新」。删除会先确认，且不可撤销。
+
+上传时目标位置已有同名文件，会询问「替换」或「跳过」，可勾选「对其余冲突同样处理」。一次最多上传 2000 个文件。
+
+编辑器里有未保存的改动时，文件标注「有未保存的改动」。你打开文件之后它在磁盘上又被修改过的，保存时会提示「文件已被修改」，让你选「覆盖」（丢弃对方的改动）或「重新加载」（丢弃你未保存的改动）。
+
+编辑器与文件查看器的右键菜单有选区动作（带文件路径与行号）、剪切 / 粘贴、复制路径与行号，见[选区动作与右键菜单](/guide/threads/selection-actions/)。
+
+## 预览文件
+
+文件面板按格式自动选择预览：
+
+| 类别 | 支持 |
+|---|---|
+| 代码与文本 | 语法高亮编辑 |
+| 可渲染的文本 | Markdown、CSV / TSV、HTML、Jupyter Notebook、mermaid 与 SVG，可在「预览 / 源码」间切换，预览跟随未保存的草稿 |
+| 文档 | PDF（pdf.js 懒渲染、可缩放、可选中文字）；Word、Excel / ODS / Numbers 与 PowerPoint 在本地解析渲染，不经第三方服务 |
+| 图片 | 常见位图可缩放并显示透明底；HEIC/HEIF、TIFF（多页）与 PSD 在本地解码 |
+| 其它 | 音视频按 Range 流式播放；字体显示样张与字形；zip / tar / tar.gz 列出目录；STL / OBJ / PLY / glTF / GLB 3D 模型可交互查看 |
+
+可渲染的文本在查看器顶部切换「预览」与「源码」。预览出错时，可以切换到源码查看或下载文件。
+
+HTML 类内容放进不执行脚本、不发网络请求的沙箱帧。
+
+## 在环境停机时浏览
+
+环境停机后，文件面板仍可浏览和预览其中的文件，且不会唤醒它，面板顶部显示「orb 已停机：只读浏览，不会唤醒。」。Docker Provider 从已停止的容器里读取；Firecracker Provider 在用户态解析 VM 磁盘，不挂载。
+
+要编辑时点「唤醒以编辑」。Provider 不支持停机预览、或 Provider 不在线时，面板会给出提示，唤醒后即可浏览。
+
+环境已删除时，文件面板只能查看 Agent 配置。
+
+## 把文件转为 Artifact
+
+文件菜单里的「转为 artifact」把这个文件存为 Artifact。Office 文件的预览、评论与在线编辑见 [Word、Excel、PowerPoint 与 PDF](/guide/artifacts/office/)。
+
+## 相关
+
+- [信息面板](/guide/workbench/info-panel/)
+- [终端](/guide/workbench/terminal/)
+- [环境如何随线程生灭](/guide/environments/lifecycle/)
+- [Artifacts 概览](/guide/artifacts/overview/)

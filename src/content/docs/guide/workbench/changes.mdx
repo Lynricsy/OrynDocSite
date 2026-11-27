@@ -1,0 +1,83 @@
+---
+title: 查看改动、提交与开 PR
+description: 在「改动」页按范围查看 diff、暂存文件、推送并开 PR，托管项目一键提交到基线，在线程页头跟踪 PR 与 CI。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### 工程面板'
+  - file: docs/features.md
+    section: '#### 托管仓库'
+  - file: docs/features.md
+    section: '### GitHub'
+  - file: docs/features.md
+    section: '### 项目'
+  - file: README.md
+    section: '## 工作台'
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 2
+---
+
+import Shot from '@/components/Shot.astro';
+
+「改动」页实时显示执行环境（orb）里工作目录的 git 改动：按文件列出相对基线分支的改动，可以逐个暂存、推送，也可以把范围切到未提交的改动或单个提交。Agent 改完代码、你要审阅并交付时用它。
+
+<Shot id="site/changes-diff" alt="改动页：顶部范围选择为「全部改动（相对 main）」，左侧按目录列出四个改动文件及暂存勾选框，右侧是所选文件的语法高亮 diff" />
+
+## 切换改动范围
+
+在页面顶部的「改动范围」里选择：
+
+| 选项 | 显示什么 |
+|---|---|
+| 「全部改动（相对 `<基线>`）」 | 工作目录相对基线分支的全部改动 |
+| 「仅未提交」 | 还没提交的改动 |
+| 「单个提交」 | 某一个提交的改动；列表只列最近的提交，更早的标注「更早的提交未列出」 |
+| 「与分支比较…」 | 输入一个分支名作为基线后点「比较」；「恢复默认基线」回到项目的基线分支 |
+
+找不到基线分支时，页面提示「未找到基线分支，显示未提交的改动」。
+
+在文件列表里点一个文件，右侧显示它的 diff。以下情况不显示 diff：二进制文件、超过 4 MiB 的未跟踪文件；超过 1 MiB 的 diff 会被截断。改动文件超过 2000 个时只列前 2000 个。
+
+## 暂存与取消暂存
+
+文件前的勾选框暂存或取消暂存单个文件；「全部暂存」「全部取消暂存」作用于整份列表。改动列表与 diff 里也有右键菜单：在文件面板打开、复制路径、暂存 / 取消暂存；diff 里选中的文字可以让模型解释，见[选区动作与右键菜单](/guide/threads/selection-actions/)。
+
+## 推送并开 PR
+
+外部仓库的项目，页面上的按钮是「推送并开 PR」；PR 已存在时变为「推送更新」。
+
+项目按仓库地址自动绑定到 GitHub 仓库。线程推送的提交成为 PR 的头提交后，线程页头开始显示这个 PR（见下文）。连接 GitHub 账号与环境内 `git`、`gh` 的免登录见 [GitHub：仓库绑定、PR 与回流](/guide/automation/github/)。
+
+## 提交并推送到托管仓库的基线
+
+Oryn 托管的项目没有 PR，按钮是「提交并推送到 `<基线>`」。点它会给线程发一段固定提示词，让 Agent 提交、rebase 到 `origin/<基线>`，再执行 `git push origin HEAD:<基线>`；推送被拒时重来，不强推。
+
+线程把提交推上项目的基线分支后，自动标记为「已交付」，这次推送带来的提交关联到这个线程（来源「由该线程推送」）。你在本机推送不关联线程。托管仓库的其余用法见[托管仓库](/guide/projects/hosted-repo/)。
+
+## 把改动同步到本机
+
+「同步」菜单提供两条命令：「复制持续镜像命令」与「复制一次性应用命令」。在这个项目的本地检出里运行复制到的命令；本地须无未提交改动。命令的用法见[命令行 oryn](/guide/clients/cli/)。
+
+## 在线程页头跟踪 PR 与 CI
+
+关联了 PR 的线程，页头显示 PR 编号、PR 状态与 CI 结果。PR 合并后，线程标记为「已交付」。
+
+<Shot id="site/thread-header-pr" alt="线程页头：项目名与线程标题之后是「已公开」标记和 PR 胶囊「#214」，胶囊右侧的圆点表示 CI 状态" />
+
+评审、评论与 CI 失败会回流进线程，Agent 自己的写操作不会回流。项目的线程子页里，每行同样显示 PR 与 CI 以及交付徽标；状态筛选里的「已交付」只列已交付的线程。
+
+## 限制
+
+- 改动列表最多显示 2000 个文件。
+- 未跟踪文件超过 4 MiB 不显示 diff；diff 超过 1 MiB 截断。
+- Runner 线程只在仓库根目录下显示改动：在 Runner 上新建线程时选仓库目录本身（或新 worktree），不要选它的子目录。
+- 创建于旧版本的环境不支持改动面板，新建线程即可。
+
+## 相关
+
+- [信息面板](/guide/workbench/info-panel/)
+- [GitHub 自动化：触发规则、门禁与发布哨兵](/guide/automation/github-automation/)
+- [托管仓库](/guide/projects/hosted-repo/)
+- [在自己的机器上跑线程（Runner）](/guide/environments/runner/)
