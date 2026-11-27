@@ -4,7 +4,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { siteRoot } from './lib/oryn';
+import { scrubMilestones, siteRoot } from './lib/oryn';
 
 interface Field {
 	path: string;
@@ -52,9 +52,6 @@ const notes = parse(readFileSync(join(siteRoot, 'reference-data/config-notes.yam
 	FileKey,
 	Record<string, Note>
 >;
-
-// 里程碑标签不进页面
-const milestone = /[（(]M\d+[^)）]*[)）]/g;
 
 const problems: string[] = [];
 for (const { key } of pages) {
@@ -106,8 +103,7 @@ function describeField(f: Field, siblings: Field[], note: Note): string {
 		}
 	}
 	// 注释里裸写的 `<data_dir>` 这类占位符放进代码格式，避免被当成 HTML 标签
-	text = text
-		.replace(milestone, '')
+	text = scrubMilestones(text)
 		.replace(/(?<!`)<([^<>\s`]+)>(?!`)/g, '`<$1>`')
 		.trim();
 	const parts = [text];
@@ -139,7 +135,7 @@ for (const page of pages) {
 	if (topScalars.length > 0) sections.push(`## 顶层键\n\n${table(topScalars)}`);
 	for (const obj of topObjects) {
 		const rows = leaves.filter((f) => f.path.startsWith(`${obj.path}.`));
-		const intro = obj.doc ? `${obj.doc.replace(milestone, '').trim()}\n\n` : '';
+		const intro = obj.doc ? `${scrubMilestones(obj.doc).trim()}\n\n` : '';
 		sections.push(`## ${obj.path}\n\n${intro}${table(rows)}`);
 	}
 

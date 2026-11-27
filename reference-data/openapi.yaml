@@ -7,7 +7,7 @@ info:
 
     - 客户端 REST（`/api/v1/...`）与客户端 WebSocket（`/api/v1/ws`，消息见 `WsClientMessage` / `WsServerMessage`）；
     - provider 协议（`/provider/v1/...`，Bearer `opv_…`）；
-    - orb link（`/orb/v1/link`，WebSocket + yamux；流头见 `LinkStreamHeader`，`ctl` 流消息见 `LinkCtl*`）与 `/orb/v1/whoami`（M11b，orb / runner 令牌换取 orb id）；
+    - orb link（`/orb/v1/link`，WebSocket + yamux；流头见 `LinkStreamHeader`，`ctl` 流消息见 `LinkCtl*`）与 `/orb/v1/whoami`（orb / runner 令牌换取 orb id）；
     - 健康检查 `/healthz`。
 
     约定：
@@ -61,41 +61,41 @@ tags:
   - name: provider-protocol
     description: provider → 控制面（C1）
   - name: boxes
-    description: Boxes：常驻机器与应用部署（M23）
+    description: Boxes：常驻机器与应用部署
   - name: sandboxes
-    description: Agent 沙箱（M30）
+    description: Agent 沙箱
   - name: websocket
     description: WebSocket 升级端点（不进入 strict server，由手写处理器服务）
   - name: shares
-    description: 线程公开分享与文件发布（M5）
+    description: 线程公开分享与文件发布
   - name: notifications
-    description: 通知、通知渠道与推送订阅（M5）
+    description: 通知、通知渠道与推送订阅
   - name: public
     description: '匿名只读（免鉴权；响应一律带 `X-Robots-Tag: noindex, nofollow` 与 `Cache-Control: no-store`）'
   - name: desktop
-    description: Desktop 面板与浏览器 Profile（M8）
+    description: Desktop 面板与浏览器 Profile
   - name: spaces
-    description: Space 与全局助手对话（M9）
+    description: Space 与全局助手对话
   - name: schedules
-    description: 定时（M9；线程内定时与「每次新建线程」定时）
+    description: 定时（线程内定时与「每次新建线程」定时）
   - name: automation
-    description: 协调宿主状态与自动化操作记录（M9）
+    description: 协调宿主状态与自动化操作记录
   - name: runners
-    description: runner（M11b：用户自己的机器以 `orbd run --runner` 接入，作为一台常驻的执行位置）
+    description: runner（用户自己的机器以 `orbd run --runner` 接入，作为一台常驻的执行位置）
   - name: orb-link
-    description: orb / runner → 控制面的非 WebSocket 端点（M11b；由手写处理器服务，不进入 ServerInterface）
+    description: orb / runner → 控制面的非 WebSocket 端点（由手写处理器服务，不进入 ServerInterface）
   - name: github
-    description: GitHub 集成（M14）
+    description: GitHub 集成
   - name: artifacts
-    description: Artifacts（M14：agent 产出的版本化交付物——页面、画布、文档、幻灯片）
+    description: Artifacts（agent 产出的版本化交付物——页面、画布、文档、幻灯片）
   - name: memory
-    description: 内置 Hindsight 记忆（M16：同项目共享、全局候选、模型中转）
+    description: 内置 Hindsight 记忆（同项目共享、全局候选、模型中转）
   - name: owner-memory
-    description: 全局助手的主人记忆（M17：Hindsight bank `oryn-owner`，只由控制面访问）
+    description: 全局助手的主人记忆（Hindsight bank `oryn-owner`，只由控制面访问）
   - name: ssh
-    description: SSH 主机、钥匙与网关审计（M18）
+    description: SSH 主机、钥匙与网关审计
   - name: browser-relay
-    description: 客户端浏览器中继（M27：复用 Chrome browser-relay 扩展经控制面驱动本机浏览器）
+    description: 客户端浏览器中继（复用 Chrome browser-relay 扩展经控制面驱动本机浏览器）
 
 paths:
   /healthz:
@@ -386,12 +386,12 @@ paths:
     post:
       tags: [auth]
       operationId: createAppSession
-      summary: 桌面 / 移动 App 用设备令牌换取网页会话的一次性码（M6）
+      summary: 桌面 / 移动 App 用设备令牌换取网页会话的一次性码
       description: |
         只接受 `kind ∈ {desktop, mobile}` 的设备令牌（Bearer `odt_…`）；其它主体（含网页会话、cli 设备）返回
         403 `app_session_unsupported`。一次性码 30 秒有效、只能兑换一次：壳把主窗口导航到
         `GET /auth/app?code=<码>&next=<站内路径>`，服务端写会话 Cookie `__Host-oryn_session` 并 302 到 `next`。
-        换得的会话绑定该设备：吊销设备即删除其会话；不能批准设备配对。详见 docs/protocol.md「M6：App 会话」。
+        换得的会话绑定该设备：吊销设备即删除其会话；不能批准设备配对。详见 docs/protocol.md「App 会话」。
       security:
         - deviceBearer: []
       responses:
@@ -610,7 +610,7 @@ paths:
     get:
       tags: [projects]
       operationId: getProjectRepo
-      summary: 项目仓库镜像状态（M24；未归档项目按需在后台克隆或拉取，不阻塞）
+      summary: 项目仓库镜像状态（未归档项目按需在后台克隆或拉取，不阻塞）
       description: 项目不存在 → 404 `not_found`。控制面没有可用的 git 时照常返回，`available:false` 并给出 `unavailableReason`。
       responses:
         '200':
@@ -625,7 +625,7 @@ paths:
     post:
       tags: [projects]
       operationId: syncProjectRepo
-      summary: 立即克隆或拉取项目仓库镜像（M24；已归档项目也可以；在后台进行）
+      summary: 立即克隆或拉取项目仓库镜像（已归档项目也可以；在后台进行）
       description: 项目不存在 → 404 `not_found`；控制面没有可用的 git → 503 `repo_unavailable`；项目没有仓库地址 → 409 `no_repo`；托管仓库不需要同步 → 409 `repo_hosted`。
       security:
         - cookieAuth: []
@@ -644,7 +644,7 @@ paths:
     post:
       tags: [projects]
       operationId: createProjectHostedRepo
-      summary: 为没有仓库的项目创建 Oryn 托管仓库（M24 阶段 ③；带一个空树的初始提交，基线分支缺省 main）
+      summary: 为没有仓库的项目创建 Oryn 托管仓库（带一个空树的初始提交，基线分支缺省 main）
       description: |
         项目不存在 → 404 `not_found`；已归档 → 409 `project_archived`；已有仓库地址或托管仓库 → 409 `repo_exists`；
         基线分支不合法 → 400 `invalid_request`；控制面没有可用的 git → 503 `repo_unavailable`。
@@ -666,7 +666,7 @@ paths:
     put:
       tags: [projects]
       operationId: putProjectWebhook
-      summary: 设置托管仓库的推送后 Webhook（M24 阶段 ③；只有主人能改）
+      summary: 设置托管仓库的推送后 Webhook（只有主人能改）
       description: |
         每次推送成功后异步 POST 一次 JSON（`X-Oryn-Event: push`、`X-Oryn-Delivery`，设了密钥再带 `X-Oryn-Signature-256: sha256=<hex>`），
         不阻塞推送、不重试、不跟随重定向。线程里 agent 的推送同样触发（载荷 `pusher.kind` 为 `thread`）。
@@ -691,7 +691,7 @@ paths:
     delete:
       tags: [projects]
       operationId: deleteProjectWebhook
-      summary: 移除托管仓库的推送后 Webhook（M24 阶段 ③；幂等）
+      summary: 移除托管仓库的推送后 Webhook（幂等）
       description: 项目不存在 → 404 `not_found`；没有 Webhook 时同样回 204。
       security:
         - cookieAuth: []
@@ -706,7 +706,7 @@ paths:
     get:
       tags: [projects]
       operationId: listProjectRepoRefs
-      summary: 项目仓库镜像的分支或标签（M24；按最近提交倒序，默认分支排第一）
+      summary: 项目仓库镜像的分支或标签（按最近提交倒序，默认分支排第一）
       description: |
         项目没有仓库地址 → 409 `no_repo`；控制面没有可用的 git → 503 `repo_unavailable`；镜像不存在、克隆中或克隆失败 → 409 `repo_not_ready`。
         读取时与 `getProjectRepo` 一样按需在后台克隆或拉取（不阻塞）。至多列出前 10000 个。
@@ -732,7 +732,7 @@ paths:
     get:
       tags: [projects]
       operationId: listProjectRepoCommits
-      summary: 项目仓库镜像的提交（M24；新到旧，可按路径过滤）
+      summary: 项目仓库镜像的提交（新到旧，可按路径过滤）
       description: |
         `ref` 缺省为仓库状态里的 `baseBranch`；依次按分支、标签、提交 sha 解析，都不是 → 404 `ref_not_found`。
         翻页的 `cursor` 记着第一页的头提交，分支移动后后续页仍然稳定。镜像不可用时的错误同 `listProjectRepoRefs`。
@@ -757,7 +757,7 @@ paths:
     get:
       tags: [projects]
       operationId: getProjectRepoCommit
-      summary: 项目仓库镜像里的一个提交（M24；含改动文件与关联线程）
+      summary: 项目仓库镜像里的一个提交（含改动文件与关联线程）
       description: |
         提交不存在 → 404 `commit_not_found`。关联线程依次取线程推送、线程里采样到的提交；GitHub 项目都没有时再按「提交所属 PR → 线程」反查一次（结果缓存，没有线程的结果 24 小时内不再反查）。
       responses:
@@ -774,7 +774,7 @@ paths:
     get:
       tags: [projects]
       operationId: getProjectRepoCommitDiff
-      summary: 提交里一个文件的 unified diff（M24；合并提交相对第一个父提交，根提交相对空树）
+      summary: 提交里一个文件的 unified diff（合并提交相对第一个父提交，根提交相对空树）
       parameters:
         - { $ref: '#/components/parameters/GitDiffPathQuery' }
         - { $ref: '#/components/parameters/GitDiffOldPathQuery' }
@@ -810,7 +810,7 @@ paths:
     get:
       tags: [projects]
       operationId: getProjectRepoTree
-      summary: 项目仓库镜像在某个 ref 下的目录或文件（M24）
+      summary: 项目仓库镜像在某个 ref 下的目录或文件
       description: 路径不存在 → 404 `path_not_found`；`ref` 规则同 `listProjectRepoCommits`。
       parameters:
         - { $ref: '#/components/parameters/RepoRefQuery' }
@@ -832,7 +832,7 @@ paths:
     get:
       tags: [projects]
       operationId: getProjectRepoBlob
-      summary: 项目仓库镜像里一个文件的内容（M24）
+      summary: 项目仓库镜像里一个文件的内容
       description: |
         目录 → 409 `not_a_file`；超过 64MiB → 413 `too_large`；路径不存在 → 404 `path_not_found`。
         安全的栅格图片 `Content-Disposition: inline`，其余一律附件；`text/html` 改为 `text/plain; charset=utf-8`；
@@ -877,7 +877,7 @@ paths:
     get:
       tags: [projects]
       operationId: listProjectSnapshots
-      summary: 项目快照列表（M11a；按 createdAt 倒序，含 building / ready / retired）
+      summary: 项目快照列表（按 createdAt 倒序，含 building / ready / retired）
       responses:
         '200':
           description: 项目快照
@@ -888,7 +888,7 @@ paths:
     delete:
       tags: [projects]
       operationId: deleteProjectSnapshots
-      summary: 清除项目快照（M11a；把匹配的 ready 快照退役，原因 `manual`；镜像由回收器异步删除）
+      summary: 清除项目快照（把匹配的 ready 快照退役，原因 `manual`；镜像由回收器异步删除）
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -907,7 +907,7 @@ paths:
     get:
       tags: [projects]
       operationId: listProjectAgentConfigFiles
-      summary: 项目级 omp 配置文件列表（M12.2；目录结构同仓库里的 `.omp/`，未写过时为空列表）
+      summary: 项目级 omp 配置文件列表（目录结构同仓库里的 `.omp/`，未写过时为空列表）
       responses:
         '200':
           description: 文件列表
@@ -922,7 +922,7 @@ paths:
     get:
       tags: [projects]
       operationId: getProjectAgentConfigFile
-      summary: 读取项目级 omp 配置文件原文（M12.2）
+      summary: 读取项目级 omp 配置文件原文
       responses:
         '200':
           description: 文件原文
@@ -933,7 +933,7 @@ paths:
     put:
       tags: [projects]
       operationId: putProjectAgentConfigFile
-      summary: 写入项目级 omp 配置文件（M12.2）
+      summary: 写入项目级 omp 配置文件
       description: |
         项目不存在（含写入期间被删除）→ 404 `not_found`；路径非法、属于运行时数据、为 `models.yml`（模型与密钥只在全局管理）、首段为 `plans/`，
         `config.yml` 不是单个 YAML 映射文档（含 `---` 分隔的多文档），或必须是文本的路径（`rules/` 下的一切与 `.md` / `.yml` / `.yaml` / `.json`）
@@ -964,7 +964,7 @@ paths:
     delete:
       tags: [projects]
       operationId: deleteProjectAgentConfigFile
-      summary: 删除项目级 omp 配置文件（M12.2）
+      summary: 删除项目级 omp 配置文件
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -978,7 +978,7 @@ paths:
     post:
       tags: [projects]
       operationId: importProjectAgentConfig
-      summary: 导入项目级 omp 配置 tar 包（M12.2；`oryn config push --project` 使用）
+      summary: 导入项目级 omp 配置 tar 包（`oryn config push --project` 使用）
       description: |
         包内路径相对项目配置根（同仓库里的 `.omp/`）；整体替换该项目的配置（不在包内的文件被删除），其它项目与全局不受影响。
         运行时数据、`models.yml` 与 `plans/` 静默跳过；配额与错误同 `putProjectAgentConfigFile`。
@@ -1004,7 +1004,7 @@ paths:
     get:
       tags: [projects]
       operationId: listProjectSecrets
-      summary: 项目级环境变量与 Git 令牌（M24 阶段 ④；保密条目不含值）
+      summary: 项目级环境变量与 Git 令牌（保密条目不含值）
       description: 项目不存在 → 404 `not_found`。已归档的项目照常可读写。只对本项目的 orb 生效，与全局同名时以项目为准；不下发给 Runner 线程与协调宿主。
       responses:
         '200':
@@ -1114,7 +1114,7 @@ paths:
         '204': { description: 已删除 }
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- runners（M11b）
+  # ---------------------------------------------------------------- runners
   /api/v1/runners:
     get:
       tags: [runners]
@@ -1187,7 +1187,7 @@ paths:
           schema: { type: string }
         - name: kind
           in: query
-          description: 线程种类；缺省 `work`（只列工作线程），`all` = 全部种类（M9）
+          description: 线程种类；缺省 `work`（只列工作线程），`all` = 全部种类
           schema:
             type: string
             enum: [work, space, assistant, all]
@@ -1195,7 +1195,7 @@ paths:
             default: work
         - name: space
           in: query
-          description: 只返回属于该 Space 的线程（M9）
+          description: 只返回属于该 Space 的线程
           schema: { $ref: '#/components/schemas/SpaceId' }
       responses:
         '200':
@@ -1210,7 +1210,7 @@ paths:
       summary: 新建线程
       description: |
         省略 `executor.provider` / `executor.type` 时依次取项目默认、`orb_defaults`、provider 的 `defaultType`。
-        `executor.kind = runner`（M11b）：runner 不在线 → 409 `runner_offline`；`dir` 不在 runner 声明的目录之内 → 400 `dir_not_served`；
+        `executor.kind = runner`：runner 不在线 → 409 `runner_offline`；`dir` 不在 runner 声明的目录之内 → 400 `dir_not_served`；
         未要求 worktree、未给 `shareDir` 且已有未归档线程以同一目录为工作目录 → 409 `dir_in_use`（体为 `DirInUseConflict`）；
         建 worktree 失败 → 400 `worktree_failed`；给了非空 `browserProfileId` → 400 `invalid`。
       security:
@@ -1231,7 +1231,7 @@ paths:
         '409':
           description: |
             `profile_in_use`：选用的浏览器 Profile 被另一台运行中的 orb 独占持有且 `profileMode` 为 `exclusive`（体为 `ProfileInUseConflict`）；
-            `dir_in_use`（M11b）：runner 上的该目录已被其它线程使用（体为 `DirInUseConflict`）。其它 409 为普通 `Error`
+            `dir_in_use`：runner 上的该目录已被其它线程使用（体为 `DirInUseConflict`）。其它 409 为普通 `Error`
           content:
             application/json:
               schema:
@@ -1297,7 +1297,7 @@ paths:
       operationId: listThreadEntries
       summary: 分页读取已复制条目（按 `seq` 升序）
       description: |
-        `after` 向后翻、`before` 向前翻（M19）：给了 `before` 时返回 `seq < before` 的最新 `limit` 条（结果仍按 `seq` 升序），
+        `after` 向后翻、`before` 向前翻：给了 `before` 时返回 `seq < before` 的最新 `limit` 条（结果仍按 `seq` 升序），
         `hasMore` 表示还有更早的。`after` 与 `before` 同时给出 → 400 `invalid_request`。
       parameters:
         - name: after
@@ -1306,7 +1306,7 @@ paths:
           schema: { type: integer, format: int64, minimum: 0, default: 0 }
         - name: before
           in: query
-          description: 只返回 `seq < before` 的条目（M19，向前翻页）
+          description: 只返回 `seq < before` 的条目（向前翻页）
           schema: { type: integer, format: int64, minimum: 1 }
         - name: limit
           in: query
@@ -1325,7 +1325,7 @@ paths:
       tags: [threads]
       operationId: forkThread
       summary: fork 线程（共用 orb 或连环境分叉）
-      description: '所在 orb 是 runner（M11b）时只能 `env: "share"`（子线程继承 `cwd`、不继承 `worktree`）；`env: "copy"` → 409 `runner_unsupported`。'
+      description: '所在 orb 是 runner时只能 `env: "share"`（子线程继承 `cwd`、不继承 `worktree`）；`env: "copy"` → 409 `runner_unsupported`。'
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -1362,7 +1362,7 @@ paths:
     post:
       tags: [threads]
       operationId: removeThreadWorktree
-      summary: 移除 Oryn 为该 runner 线程建的 worktree（M11b）
+      summary: 移除 Oryn 为该 runner 线程建的 worktree
       description: |
         经 ctl `worktree.remove` 在 runner 上执行 `git worktree remove <dir>`（不带 `--force`）并尝试 `git branch -d`（分支未合并则保留）；
         成功后清空线程的 `worktree`。线程没有 `worktree` → 409 `conflict`；runner 不在线 → 409 `runner_offline`；
@@ -1474,7 +1474,7 @@ paths:
       tags: [orbs]
       operationId: deleteOrb
       summary: 删除 orb（先 shutdown 再 delete；其线程保留条目，`orbId` 置空）
-      description: runner 的 orb（M11b）→ 409 `runner_unsupported`（改用 `DELETE runners/{id}`）。
+      description: runner 的 orb→ 409 `runner_unsupported`（改用 `DELETE runners/{id}`）。
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -1493,7 +1493,7 @@ paths:
       tags: [orbs]
       operationId: pauseOrb
       summary: 手动冻结或停机
-      description: runner 的 orb（M11b）→ 409 `runner_unsupported`。
+      description: runner 的 orb→ 409 `runner_unsupported`。
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -1517,7 +1517,7 @@ paths:
       tags: [orbs]
       operationId: resumeOrb
       summary: 唤醒 orb（`frozen` / `stopped` / `failed` → `waking`）
-      description: runner 的 orb（M11b）→ 409 `runner_unsupported`（runner 由用户机器上的 `orbd run --runner` 主动接入）。
+      description: runner 的 orb→ 409 `runner_unsupported`（runner 由用户机器上的 `orbd run --runner` 主动接入）。
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -1584,7 +1584,7 @@ paths:
               schema: { type: string }
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- orb 文件（M3，经 fs 流代理到 orbd）
+  # ---------------------------------------------------------------- orb 文件（经 fs 流代理到 orbd）
   /api/v1/orbs/{id}/fs/roots:
     parameters:
       - { $ref: '#/components/parameters/OrbIdPath' }
@@ -1593,7 +1593,7 @@ paths:
       tags: [orbs]
       operationId: getOrbFsRoots
       summary: orb 内的文件根（`$HOME` 与当前工作目录）
-      description: '经 orb link 的 `fs` 流转发到 orbd 本机 API（`GET /fs/roots` 等，见 docs/protocol.md M3 节）。orb 冻结 / 停机时默认唤醒并至多等待 25s；`bg=true` 时不唤醒、不计用户交互。'
+      description: '经 orb link 的 `fs` 流转发到 orbd 本机 API（`GET /fs/roots` 等，见 docs/protocol.md 节）。orb 冻结 / 停机时默认唤醒并至多等待 25s；`bg=true` 时不唤醒、不计用户交互。'
       parameters:
         - { $ref: '#/components/parameters/OrbBackgroundQuery' }
         - { $ref: '#/components/parameters/OrbOfflineQuery' }
@@ -1793,7 +1793,7 @@ paths:
       description: |
         线程须在该 orb 上；必须是普通文件且 ≤100MiB（目录 409 `is_a_directory`，超限 413 `too_large`）。
         orb 冻结 / 停机时唤醒并至多等待 25s。之后 orb 里的修改不影响已发布的副本。
-        runner 的 orb（M11b）：路径范围为 `threadId` 线程的工作目录（与带 `thread` 的文件接口相同），本接口不另设 `thread` 查询参数。
+        runner 的 orb：路径范围为 `threadId` 线程的工作目录（与带 `thread` 的文件接口相同），本接口不另设 `thread` 查询参数。
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -1811,7 +1811,7 @@ paths:
               schema: { $ref: '#/components/schemas/PublishedFile' }
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- orb 改动（M3，git，经 fs 流代理到 orbd）
+  # ---------------------------------------------------------------- orb 改动（git，经 fs 流代理到 orbd）
   /api/v1/orbs/{id}/git/status:
     parameters:
       - { $ref: '#/components/parameters/OrbIdPath' }
@@ -1921,7 +1921,7 @@ paths:
         '204': { description: 成功 }
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- oryn sync（M5，经 fs 流代理到 orbd，特性 `sync`）
+  # ---------------------------------------------------------------- oryn sync（经 fs 流代理到 orbd，特性 `sync`）
   /api/v1/orbs/{id}/sync/prepare:
     parameters:
       - { $ref: '#/components/parameters/OrbIdPath' }
@@ -1974,7 +1974,7 @@ paths:
               schema: { type: string, format: binary }
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- 受管服务与 portal（M4）
+  # ---------------------------------------------------------------- 受管服务与 portal
   /api/v1/orbs/{id}/services:
     parameters:
       - { $ref: '#/components/parameters/OrbIdPath' }
@@ -2110,7 +2110,7 @@ paths:
         '204': { description: 成功 }
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- desktop & browser profiles (M8)
+  # ---------------------------------------------------------------- desktop & browser profiles 
   /api/v1/orbs/{id}/desktop/profile:
     parameters:
       - { $ref: '#/components/parameters/OrbIdPath' }
@@ -2237,7 +2237,7 @@ paths:
     post:
       tags: [desktop]
       operationId: launchOrbDesktopApp
-      summary: 在桌面上启动一个应用（M25；每次都起一个新实例）
+      summary: 在桌面上启动一个应用（每次都起一个新实例）
       description: |
         `app` 取自 `desktop.apps[].id`；`chromium` 走浏览器启动（同 `startOrbBrowser`），其余由 orbd 按镜像清单起进程。
         「切到已有窗口」由客户端改用 `operateOrbDesktopWindow` 决定，本接口不做。
@@ -2261,7 +2261,7 @@ paths:
     get:
       tags: [desktop]
       operationId: getOrbDesktopAppIcon
-      summary: 应用图标（M25；取自 orb 镜像里已安装应用自带的图标）
+      summary: 应用图标（取自 orb 镜像里已安装应用自带的图标）
       description: |
         **不唤醒 orb**：orb 不在 `ready` → 409 `orb_unavailable`。旧 orbd（hello 不含 `desktop-apps`）→ 409 `orbd_outdated`；
         清单里没有该应用或它没有图标 → 404 `app_not_found`。图标内容来自 orb，始终带 `X-Content-Type-Options: nosniff`
@@ -2287,7 +2287,7 @@ paths:
     post:
       tags: [desktop]
       operationId: operateOrbDesktopWindow
-      summary: 激活、最小化或关闭桌面上的一个窗口（M25）
+      summary: 激活、最小化或关闭桌面上的一个窗口
       description: |
         `window` 取自 `desktop.windows[].id`。`activate` 切到前台（最小化的窗口先还原）；`minimize` 最小化；
         `close` 请窗口自行关闭（EWMH `_NET_CLOSE_WINDOW`，应用可能先弹确认）。
@@ -2517,7 +2517,7 @@ paths:
               schema: { $ref: '#/components/schemas/PublishedFile' }
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- shares（M5）
+  # ---------------------------------------------------------------- shares
   /api/v1/shares:
     get:
       tags: [shares]
@@ -2731,7 +2731,7 @@ paths:
     get:
       tags: [settings]
       operationId: getAssistantSettings
-      summary: 全局助手的设置（M19：联网总开关、关掉的 MCP 服务器、助手的电脑）
+      summary: 全局助手的设置（联网总开关、关掉的 MCP 服务器、助手的电脑）
       responses:
         '200':
           description: 当前设置（没有存过 = 默认：联网开、无禁用项）
@@ -3170,13 +3170,13 @@ paths:
     get:
       tags: [agent-config]
       operationId: getAgentConfigApplyStatus
-      summary: omp 配置在会话上的生效状态（M13）
+      summary: omp 配置在会话上的生效状态
       description: |
         全局 omp-home 或项目层的 `PUT` / `DELETE` / `import` 成功后防抖 1 秒，控制面把这一层下发到所有 `ready` 且支持
         `omphome-apply` 的 orb（协调宿主只收 `config.yml` 与 `models.yml`；项目层只发给该项目的 orb），再按变化分类作用到
         agent 在跑的会话：技能、命令、规则、提示片段、instruction、上下文文件、MCP 在会话静止时 `reload_plugins`；hook、
         扩展模块、自定义工具、`SYSTEM.md`、`APPEND_SYSTEM.md`、`PERSONALITY.md`、`models.yml` 以及设置 schema 中
-        `restartRequired` 的键要重启会话，列在 `threads` 里。规则见 docs/protocol.md「M13：omp 配置立即下发」。
+        `restartRequired` 的键要重启会话，列在 `threads` 里。规则见 docs/protocol.md「omp 配置立即下发」。
         状态只在内存里：agent 退出即清除，orynd 重启后为空。
       responses:
         '200':
@@ -3189,7 +3189,7 @@ paths:
     post:
       tags: [agent-config]
       operationId: restartAgentConfigSessions
-      summary: 重启需重启才能让配置生效的会话（M13）
+      summary: 重启需重启才能让配置生效的会话
       description: |
         对 apply-status 列出的每个会话：等它静止（正在跑的回合不受影响）后停掉 omp 进程，下一条消息经唤醒路径以原会话
         自动拉起。agent 已不在运行的会话直接清除标记。
@@ -3238,9 +3238,9 @@ paths:
               schema: { $ref: '#/components/schemas/SearchResults' }
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- stats（M10）
+  # ---------------------------------------------------------------- stats
   # 窗口参数 from / to 缺省 = 近 7 天；from ≥ to → 400 `invalid_request`；tz 不可加载 → 400 `invalid_timezone`；
-  # 时间桶超过 1000 个 → 400 `range_too_large`。口径见 docs/protocol.md「M10：统计分析」。
+  # 时间桶超过 1000 个 → 400 `range_too_large`。口径见 docs/protocol.md「统计分析」。
   /api/v1/stats/meta:
     get:
       tags: [stats]
@@ -3442,7 +3442,7 @@ paths:
               schema: { $ref: '#/components/schemas/BudgetStatus' }
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- notifications（M5）
+  # ---------------------------------------------------------------- notifications
   /api/v1/notifications:
     get:
       tags: [notifications]
@@ -3637,10 +3637,10 @@ paths:
     get:
       tags: [notifications]
       operationId: getPushGateway
-      summary: 官方推送网关的 origin 与本机主机公钥（M28；App 据此向网关申请授权）
+      summary: 官方推送网关的 origin 与本机主机公钥（App 据此向网关申请授权）
       description: |
         `origin` 是 `orynd.yaml` 的 `push.gateway.url`（缺省 `https://push.oryn.best`），`hostKey` 是 `<data_dir>/push-gateway.key`
-        的 Ed25519 公钥。`push.gateway.url` 为空串（关闭网关）时 404 `gateway_disabled`。见 docs/protocol.md「官方推送网关（M28）」。
+        的 Ed25519 公钥。`push.gateway.url` 为空串（关闭网关）时 404 `gateway_disabled`。见 docs/protocol.md「官方推送网关」。
       responses:
         '200':
           description: 网关信息
@@ -3667,12 +3667,12 @@ paths:
       description: |
         `kind` 缺省为 `webpush`：`endpoint` 须是 `https://`（`http://` 仅允许回环主机）；`keys.p256dh` 解码后须为 65 字节且以 0x04 开头、
         `keys.auth` 解码后须为 16 字节，否则 400 `push_invalid`。
-        `kind: gateway`（M28，官方推送网关）：须带 `gateway`（网关 origin）、`grant`（网关授权 id）与 `keys`（App 生成的 RFC 8291
+        `kind: gateway`（官方推送网关）：须带 `gateway`（网关 origin）、`grant`（网关授权 id）与 `keys`（App 生成的 RFC 8291
         接收端密钥，校验同上），不得带 `endpoint`；形态错误（含已删除的 `kind: fcm`）→ 400 `push_invalid`。
         网关已关闭 → 409 `gateway_disabled`；`gateway` 不等于当前 `push.gateway.url` → 409 `gateway_changed`。
         orynd 先以主机签名调网关 `POST /v1/grants/verify`：410 / 403 → 409 `gateway_grant_invalid`；网络错误或 5xx → 502 `gateway_unreachable`。
         通过后按 `endpoint = <gateway>/v1/grants/<grant>` upsert（再次登记覆盖 `keys`）。载荷用这对密钥加密，网关只见密文
-        （见 docs/protocol.md「M7：移动推送」）。
+        （见 docs/protocol.md「移动推送」）。
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -3704,7 +3704,7 @@ paths:
         '204': { description: 已删除 }
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- Space、全局助手、定时与协调宿主（M9）
+  # ---------------------------------------------------------------- Space、全局助手、定时与协调宿主
   /api/v1/spaces:
     get:
       tags: [spaces]
@@ -3840,7 +3840,7 @@ paths:
     get:
       tags: [spaces]
       operationId: listAssistantMcpServers
-      summary: 全局 `mcp.json` 里的服务器及其对全局助手是否可用（M19）
+      summary: 全局 `mcp.json` 里的服务器及其对全局助手是否可用
       description: |
         解析全局配置的 `mcp.json`（已停用的条目不列）。只有 HTTP / SSE 传输、鉴权头可由 orynd 注入的服务器可以给助手用；
         其余标 `usable: false` 并给出原因。解析失败 → 200 空列表。
@@ -3861,7 +3861,7 @@ paths:
     get:
       tags: [spaces]
       operationId: listAssistantMcpServerTools
-      summary: 列出一个 MCP 服务器的工具（M26，给「研究可用工具」白名单用）
+      summary: 列出一个 MCP 服务器的工具（给「研究可用工具」白名单用）
       description: |
         orynd 以 Streamable HTTP 连上该服务器（带 `mcp.json` 里的鉴权头），依次 `initialize`、`tools/list`（至多 10 页）。
         `readOnly` 是服务器自报的 `annotations.readOnlyHint`，不是保证。找不到 → 404；不可用 → 400 `invalid_request`；
@@ -3877,7 +3877,7 @@ paths:
     get:
       tags: [spaces]
       operationId: getResearchSettings
-      summary: 后台研究的设置与今天的花费（M26）
+      summary: 后台研究的设置与今天的花费
       responses:
         '200':
           description: 设置
@@ -3888,7 +3888,7 @@ paths:
     put:
       tags: [spaces]
       operationId: putResearchSettings
-      summary: 整体改写后台研究的设置（M26；超出取值范围 → 400 `invalid_request`）
+      summary: 整体改写后台研究的设置（超出取值范围 → 400 `invalid_request`）
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -3909,7 +3909,7 @@ paths:
     get:
       tags: [spaces]
       operationId: listResearchTopics
-      summary: 跟进话题（M26，新的在前）
+      summary: 跟进话题（新的在前）
       parameters:
         - name: state
           in: query
@@ -3928,7 +3928,7 @@ paths:
     post:
       tags: [spaces]
       operationId: createResearchTopic
-      summary: 新建跟进话题（M26；重名、超长、活跃话题达 50 个 → 400 `invalid_request`）
+      summary: 新建跟进话题（重名、超长、活跃话题达 50 个 → 400 `invalid_request`）
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -3954,7 +3954,7 @@ paths:
     get:
       tags: [spaces]
       operationId: getResearchTopic
-      summary: 一个跟进话题（M26）
+      summary: 一个跟进话题
       responses:
         '200':
           description: 话题
@@ -3965,7 +3965,7 @@ paths:
     patch:
       tags: [spaces]
       operationId: updateResearchTopic
-      summary: 修改跟进话题（M26；`state` 只能在 `active` 与 `paused` 之间切换）
+      summary: 修改跟进话题（`state` 只能在 `active` 与 `paused` 之间切换）
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -3985,7 +3985,7 @@ paths:
     delete:
       tags: [spaces]
       operationId: deleteResearchTopic
-      summary: 删除跟进话题（M26；置为 `dismissed`，保留标题用于去重）
+      summary: 删除跟进话题（置为 `dismissed`，保留标题用于去重）
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -4002,7 +4002,7 @@ paths:
     post:
       tags: [spaces]
       operationId: runResearchTopic
-      summary: 立即检查一个活跃话题（M26；非 `active` → 400 `invalid_request`）
+      summary: 立即检查一个活跃话题（非 `active` → 400 `invalid_request`）
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -4018,7 +4018,7 @@ paths:
     get:
       tags: [spaces]
       operationId: listResearchRuns
-      summary: 最近的研究运行（M26，新的在前）
+      summary: 最近的研究运行（新的在前）
       parameters:
         - name: limit
           in: query
@@ -4034,7 +4034,7 @@ paths:
     get:
       tags: [spaces]
       operationId: getAssistantMain
-      summary: 全局助手的主线对话（M19；没有则创建）
+      summary: 全局助手的主线对话（没有则创建）
       description: |
         主线是 `kind = assistant`、`main = true` 的单例，不能归档或删除，不出现在助手对话列表里。
         需要新建而协调宿主不可用时 409 `coordinator_unavailable`。
@@ -4053,7 +4053,7 @@ paths:
     get:
       tags: [spaces]
       operationId: getAssistantNotes
-      summary: 主线备忘（M19）
+      summary: 主线备忘
       responses:
         '200':
           description: 备忘
@@ -4085,7 +4085,7 @@ paths:
     get:
       tags: [spaces]
       operationId: getAssistantComputer
-      summary: 助手的电脑（M19）：还没有时 `orbId` 省略
+      summary: 助手的电脑：还没有时 `orbId` 省略
       responses:
         '200':
           description: 状态
@@ -4479,7 +4479,7 @@ paths:
     post:
       tags: [threads]
       operationId: openViewFrame
-      summary: 为转录里的一次 render_html 调用申请视图帧（M33）
+      summary: 为转录里的一次 render_html 调用申请视图帧
       description: |
         在该线程主会话的条目里找这次调用（assistant 消息里 `id` 相同、`name` 为 `render_html` 的 toolCall）；找不到 404。
         帧内容按需从条目读取，策略见 docs/protocol.md 的「视图帧」。帧令牌就是访问凭证，orynd 重启后全部失效；
@@ -5176,7 +5176,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ArtifactPrefs' }
         default: { $ref: '#/components/responses/Error' }
-  # ---------------------------------------------------------------- memory (M16)
+  # ---------------------------------------------------------------- memory 
   /api/v1/memory/settings:
     get:
       tags: [memory]
@@ -5639,7 +5639,7 @@ paths:
             application/octet-stream:
               schema: { type: string, format: binary }
         default: { $ref: '#/components/responses/Error' }
-  # ---------------------------------------------------------------- owner memory (M17)
+  # ---------------------------------------------------------------- owner memory 
   /api/v1/owner-memory/settings:
     get:
       tags: [owner-memory]
@@ -6216,7 +6216,7 @@ paths:
     put:
       tags: [schedules]
       operationId: putScheduleWebhook
-      summary: 开启或修改定时的入站 Webhook（M31；只有主人能改）
+      summary: 开启或修改定时的入站 Webhook（只有主人能改）
       description: |
         仅 `new_thread` 定时（否则 400 `invalid_schedule`）。没有 Webhook 时新建并生成地址密钥；`rotateKey = true` 时换新密钥，旧地址立即失效。
         生成了新密钥时响应带一次性的完整地址 `url`（`<public_url>/api/v1/public/hooks/<key>`），之后无法取回。
@@ -6241,7 +6241,7 @@ paths:
     delete:
       tags: [schedules]
       operationId: deleteScheduleWebhook
-      summary: 关闭定时的入站 Webhook（M31；幂等，地址立即失效）
+      summary: 关闭定时的入站 Webhook（幂等，地址立即失效）
       description: 定时不存在 → 404 `schedule_not_found`；没有 Webhook 时同样回 204。
       security:
         - cookieAuth: []
@@ -6297,7 +6297,7 @@ paths:
         '204': { description: 已删除 }
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- github（M14）
+  # ---------------------------------------------------------------- github
   /api/v1/github:
     get:
       tags: [github]
@@ -6388,7 +6388,7 @@ paths:
     put:
       tags: [github]
       operationId: setGitHubOAuthApp
-      summary: 保存 OAuth App 的 Client ID / Secret 与 webhook 基址（M15；`clientSecret` 缺省时沿用已存的值）
+      summary: 保存 OAuth App 的 Client ID / Secret 与 webhook 基址（`clientSecret` 缺省时沿用已存的值）
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -6408,7 +6408,7 @@ paths:
     delete:
       tags: [github]
       operationId: deleteGitHubOAuthApp
-      summary: 删除 OAuth App 配置（M15；先删除 Oryn 建的全部仓库 hook，再断开两个身份）
+      summary: 删除 OAuth App 配置（先删除 Oryn 建的全部仓库 hook，再断开两个身份）
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -6420,7 +6420,7 @@ paths:
     get:
       tags: [github]
       operationId: listGitHubHooks
-      summary: Oryn 管理的仓库 webhook 及其状态（M15）
+      summary: Oryn 管理的仓库 webhook 及其状态
       responses:
         '200':
           description: hook 列表
@@ -6432,7 +6432,7 @@ paths:
     get:
       tags: [github]
       operationId: listGitHubAudit
-      summary: GitHub 写操作审计（M15；按时间倒序，保留 30 天）
+      summary: GitHub 写操作审计（按时间倒序，保留 30 天）
       parameters:
         - name: thread
           in: query
@@ -6459,7 +6459,7 @@ paths:
     get:
       tags: [github]
       operationId: listGitHubTasks
-      summary: 触发规则建立的 issue 线程与发布哨兵的状态（M15）
+      summary: 触发规则建立的 issue 线程与发布哨兵的状态
       responses:
         '200':
           description: 任务列表
@@ -6471,7 +6471,7 @@ paths:
     post:
       tags: [github]
       operationId: cleanupGitHubTask
-      summary: 把 issue 线程置为 `abandoned` 并冻结其 orb（M15；不改动远端）
+      summary: 把 issue 线程置为 `abandoned` 并冻结其 orb（不改动远端）
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -6492,7 +6492,7 @@ paths:
     post:
       tags: [github]
       operationId: triageGitHubIssue
-      summary: 拉取线上 issue，合成 `issues.opened` 交给触发规则（M15）
+      summary: 拉取线上 issue，合成 `issues.opened` 交给触发规则
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -6518,7 +6518,7 @@ paths:
     post:
       tags: [github]
       operationId: replayGitHubDelivery
-      summary: 重放 7 天内已结束的投递（M15）
+      summary: 重放 7 天内已结束的投递
       security:
         - cookieAuth: []
           csrfHeader: []
@@ -6530,7 +6530,7 @@ paths:
     get:
       tags: [github]
       operationId: listGitHubPresets
-      summary: 触发规则预设（M15：robomp 分诊 / PR 评审 / 发布哨兵）
+      summary: 触发规则预设（robomp 分诊 / PR 评审 / 发布哨兵）
       responses:
         '200':
           description: 预设列表
@@ -6707,7 +6707,7 @@ paths:
     post:
       tags: [public]
       operationId: receiveScheduleWebhook
-      summary: 定时的入站 Webhook（M31）：触发一次运行（`trigger = webhook`）
+      summary: 定时的入站 Webhook：触发一次运行（`trigger = webhook`）
       description: |
         请求体为任意 UTF-8 文本（≤64 KiB），连同 `User-Agent`、名称含 `Event` / `Delivery` 的请求头与查询参数作为不可信数据块
         附在提示词之后，交给新线程。Webhook 运行建出的线程是全自动线程，GitHub 身份只用 Agent 账号（不可用时运行失败，
@@ -6752,7 +6752,7 @@ paths:
               schema: { type: string }
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- boxes（M23：常驻机器与应用部署）
+  # ---------------------------------------------------------------- boxes（常驻机器与应用部署）
   /api/v1/boxes:
     get:
       tags: [boxes]
@@ -7144,7 +7144,7 @@ paths:
           description: 已删除
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- ssh（M18：SSH 主机、钥匙与网关审计）
+  # ---------------------------------------------------------------- ssh（SSH 主机、钥匙与网关审计）
   /api/v1/ssh/hosts:
     get:
       tags: [ssh]
@@ -7582,7 +7582,7 @@ paths:
         '101': { description: 切换到 WebSocket }
         default: { $ref: '#/components/responses/Error' }
 
-  # ---------------------------------------------------------------- public（M5，匿名只读）
+  # ---------------------------------------------------------------- public（匿名只读）
   /api/v1/public/shares/{slug}:
     parameters:
       - { $ref: '#/components/parameters/ShareSlugPath' }
@@ -7688,7 +7688,7 @@ paths:
     post:
       tags: [public]
       operationId: openPublicShareViewFrame
-      summary: 为公开分享里的一次 render_html 调用申请视图帧（M33，匿名）
+      summary: 为公开分享里的一次 render_html 调用申请视图帧（匿名）
       description: |
         内容一律从服务端条目取（访客不提交 HTML）：只在分享范围内、用清洗后的公开条目查找，且只服务范围内已有成功结果的调用。
         帧绑定这个分享，撤销后帧即 404。slug 不存在、已撤销或找不到调用一律 404 `not_found`。帧表已被主人的帧占满（256 个）时
@@ -7928,7 +7928,7 @@ paths:
         `ctl` 流（orbd 建连后第一条且唯一）为双向 JSON 行：`LinkCtlRequest` / `LinkCtlResponse` / `LinkCtlNotification`；
         各方法的 params / result 见 `LinkCtlMethod` 与 `LinkCtl<Method>Params` / `LinkCtl<Method>Result`。
         orb 令牌只对本 orb 有效：`threadId` 不属于该 orb 的 `entries.*`、`agent` 流、`egress` 流会导致 link 被关闭。
-        M11b：runner 以 `ort_…` 令牌接入同一端点（对应其常驻 orb；该 orb 的 `egress` 流直接关闭）。
+        runner 以 `ort_…` 令牌接入同一端点（对应其常驻 orb；该 orb 的 `egress` 流直接关闭）。
       security:
         - orbBearer: []
         - runnerBearer: []
@@ -7946,7 +7946,7 @@ paths:
     get:
       tags: [orb-link]
       operationId: orbWhoami
-      summary: 令牌对应的 orb（M11b）
+      summary: 令牌对应的 orb
       description: |
         `Authorization: Bearer oot_… | ort_…`。runner 形态的 orbd 在拨 link 之前用它得知自己的 orb id。
         令牌无效、已吊销或其 orb 已删除 → 401 `unauthorized`。由手写处理器服务（挂在 `/orb/v1/link` 旁），不进入 ServerInterface。
@@ -7960,12 +7960,12 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/OrbWhoami' }
         default: { $ref: '#/components/responses/Error' }
-  # ---------------------------------------------------------------- browser-relay（M27）
+  # ---------------------------------------------------------------- browser-relay
   /api/v1/browser-relay/clients:
     get:
       tags: [browser-relay]
       operationId: listBrowserRelayClients
-      summary: 列出当前在线的本机浏览器扩展客户端（M27）
+      summary: 列出当前在线的本机浏览器扩展客户端
       responses:
         '200':
           description: 在线浏览器扩展客户端列表
@@ -7977,7 +7977,7 @@ paths:
     get:
       tags: [websocket, browser-relay]
       operationId: browserRelaySocket
-      summary: 客户端 Chrome 扩展中继通道（WebSocket，文本 JSON 帧，M27）
+      summary: 客户端 Chrome 扩展中继通道（WebSocket，文本 JSON 帧）
       description: |
         由一次性 `ws-ticket` 鉴权，只接受 `kind=browser_extension` 的设备主体。
         扩展直连本端点并多路复用承载多个线程的 `/ext` 协议帧（本机过滤未共享标签页、非阻塞审批）。
@@ -7998,7 +7998,7 @@ paths:
     get:
       tags: [browser-relay]
       operationId: getThreadBrowserRelay
-      summary: 查询线程当前绑定的本机浏览器扩展状态（M27）
+      summary: 查询线程当前绑定的本机浏览器扩展状态
       responses:
         '200':
           description: 绑定与在线状态
@@ -8009,7 +8009,7 @@ paths:
     put:
       tags: [browser-relay]
       operationId: bindThreadBrowserRelay
-      summary: 绑定线程到指定本机浏览器扩展设备（M27）
+      summary: 绑定线程到指定本机浏览器扩展设备
       requestBody:
         required: true
         content:
@@ -8025,7 +8025,7 @@ paths:
     delete:
       tags: [browser-relay]
       operationId: unbindThreadBrowserRelay
-      summary: 解除线程与本机浏览器扩展的绑定（幂等，M27）
+      summary: 解除线程与本机浏览器扩展的绑定（幂等）
       responses:
         '200':
           description: 解绑后的状态（`bound=false`）
@@ -8061,7 +8061,7 @@ components:
     runnerBearer:
       type: http
       scheme: bearer
-      description: runner 令牌 `ort_…`（M11b；只用于 `/orb/v1/link` 与 `/orb/v1/whoami`）
+      description: runner 令牌 `ort_…`（只用于 `/orb/v1/link` 与 `/orb/v1/whoami`）
 
   parameters:
     DeviceIdPath:
@@ -8192,7 +8192,7 @@ components:
       required: true
       description: |
         orb 内路径：绝对路径或 `~/…`；跟随符号链接后必须位于 `$HOME` 之下（否则 403 `outside_home`）。响应中的路径一律为绝对路径。
-        runner 的 orb（M11b）：范围改为 `thread` 线程的工作目录（越界 → 403 `dir_not_served`）。
+        runner 的 orb：范围改为 `thread` 线程的工作目录（越界 → 403 `dir_not_served`）。
       schema: { type: string, minLength: 1, maxLength: 4096 }
     OrbBackgroundQuery:
       name: bg
@@ -8212,9 +8212,9 @@ components:
       name: thread
       in: query
       description: |
-        发起请求的线程（M11b）：须是该 orb 上的线程（否则 400 `invalid_request`）；该线程有工作目录（`Thread.cwd`）时，
+        发起请求的线程：须是该 orb 上的线程（否则 400 `invalid_request`）；该线程有工作目录（`Thread.cwd`）时，
         控制面以请求头 `X-Oryn-Workdir` 把它转给 orbd，文件与改动的范围、`root` 的缺省值随之改为该目录。
-        runner 的 orb 必须带（否则 400 `thread_required`）；普通 orb 可省略，行为与 M3 相同。
+        runner 的 orb 必须带（否则 400 `thread_required`）；普通 orb 可省略，行为与 相同。
       schema: { $ref: '#/components/schemas/ThreadId' }
     GitRootQuery:
       name: root
@@ -8337,7 +8337,7 @@ components:
     StatsFormatQuery:
       name: format
       in: query
-      description: '`csv` 返回 `text/csv; charset=utf-8` 附件（列见 docs/protocol.md「M10：统计分析」）'
+      description: '`csv` 返回 `text/csv; charset=utf-8` 附件（列见 docs/protocol.md「统计分析」）'
       schema: { $ref: '#/components/schemas/StatsFormat' }
     StatsDownloadQuery:
       name: download
@@ -8500,7 +8500,7 @@ components:
     ArtifactId:
       type: string
       pattern: '^art_[0-9A-Z]{26}$'
-      description: '`art_<ulid>`（M14 artifact）'
+      description: '`art_<ulid>`（artifact）'
     ShareId:
       type: string
       pattern: '^shr_[0-9A-Z]{26}$'
@@ -8532,19 +8532,19 @@ components:
     SpaceId:
       type: string
       pattern: '^spc_[0-9A-Z]{26}$'
-      description: '`spc_<ulid>`（M9）'
+      description: '`spc_<ulid>`'
     ScheduleId:
       type: string
       pattern: '^sch_[0-9A-Z]{26}$'
-      description: '`sch_<ulid>`（M9）'
+      description: '`sch_<ulid>`'
     ScheduleRunId:
       type: string
       pattern: '^srn_[0-9A-Z]{26}$'
-      description: '`srn_<ulid>`（M9，定时的一次运行）'
+      description: '`srn_<ulid>`（定时的一次运行）'
     AutomationActionId:
       type: string
       pattern: '^cac_[0-9A-Z]{26}$'
-      description: '`cac_<ulid>`（M9，操作记录）'
+      description: '`cac_<ulid>`（操作记录）'
     OmpFrame:
       type: object
       additionalProperties: true
@@ -8558,34 +8558,34 @@ components:
           description: |
             机器可读错误码。已定义：`unauthorized`、`forbidden`、`not_found`、`invalid_request`、`conflict`、
             `provider_already_connected`、`managed_by_oryn`、`use_oryn_fork`、`queue_full`、`orb_unavailable`、`rate_limited`（429，带 `Retry-After`）、`internal`。
-            M3（orb 文件 / 改动 / 附件，HTTP 状态见 docs/protocol.md）：`invalid_path`、`outside_home`、`protected_path`、`exists`、`is_a_directory`、
+            （orb 文件 / 改动 / 附件，HTTP 状态见 docs/protocol.md）：`invalid_path`、`outside_home`、`protected_path`、`exists`、`is_a_directory`、
             `not_a_directory`、`not_a_repo`、`git_busy`、`modified`（412）、`too_large`（413）、`checksum_mismatch`（422）、`git_failed`、`no_space`（507）、
             `orb_not_ready`、`orbd_outdated`、`orb_deleted`（410）、`no_orb`、`orb_unavailable`（503，带 `Retry-After: 3`）、`orbd_unreachable`（502）、`orbd_bad_response`（502，orbd 返回了非预期状态）、`orbd_timeout`（504）、`attachment_not_found`。
-            M4（受管服务与 portal，HTTP 状态见 docs/protocol.md）：`portal_disabled`（409，未配置 `portal_domain`）、`portal_not_found`（404）、`portal_unauthorized`（401）、
+            （受管服务与 portal，HTTP 状态见 docs/protocol.md）：`portal_disabled`（409，未配置 `portal_domain`）、`portal_not_found`（404）、`portal_unauthorized`（401）、
             `cross_site_blocked`（403）、`forbidden_port`（403）、`service_unreachable`（502）、`portal_unreachable`（502）、`portal_timeout`（504）、`portal_busy`（503）、
             `service_not_found`（404）、`invalid_service`（400）、`name_conflict`（409）、`services_not_ready`（409）。
-            M5（分享、通知与 sync，HTTP 状态见 docs/protocol.md）：`invalid`（400 / 409）、`secrets_found`（409，体为 `ShareScanConflict`）、
+            （分享、通知与 sync，HTTP 状态见 docs/protocol.md）：`invalid`（400 / 409）、`secrets_found`（409，体为 `ShareScanConflict`）、
             `channel_exists`（409，已有 Telegram 渠道）、`invalid_channel`（400）、`channel_not_linked`（409）、`push_invalid`（400）、
             `share_busy`（503，匿名连接数已满）、`sync_no_commits`（409）、`sync_no_common`（409）、`sync_shallow`（409）、`sync_bundle_gone`（404）。
-            M6（App 会话）：`app_session_unsupported`（403，只有 desktop / mobile 设备令牌能换取 App 会话）。
-            M8（Desktop 与浏览器 Profile，HTTP 状态见 docs/protocol.md）：`profile_not_found`（404）、`profile_in_use`（409，体为 `ProfileInUseConflict`）、
+            （App 会话）：`app_session_unsupported`（403，只有 desktop / mobile 设备令牌能换取 App 会话）。
+            （Desktop 与浏览器 Profile，HTTP 状态见 docs/protocol.md）：`profile_not_found`（404）、`profile_in_use`（409，体为 `ProfileInUseConflict`）、
             `profile_name_taken`（409）、`profile_limit`（409）、`no_profile`（409）、`profile_readonly`（409）、`profile_too_large`（413）、`profile_save_failed`（502）。
-            M9（Space、助手与定时，HTTP 状态见 docs/protocol.md）：`invalid_schedule`（400）、`schedule_not_found`（404）、`space_not_found`（404）、
+            （Space、助手与定时，HTTP 状态见 docs/protocol.md）：`invalid_schedule`（400）、`schedule_not_found`（404）、`space_not_found`（404）、
             `schedule_busy`（409）、`schedule_name_taken`（409）、`schedule_limit`（409，启用中的定时已达 200）、`schedule_conflict`（409，`ifRev` 与当前 `rev` 不符）、`space_name_taken`（409）、
             `thread_archived`（409）、`space_thread`（409，不能直接删除 Space 的聊天线程）、`coordinator_unavailable`（409，`message` 为原因）、
             `coordinator_restricted`（400 / WS `error`，协调线程不允许的命令、fork、分享、附件，或把线程挂到协调 orb / `@host`）。
-            M9.6（身份与角色头像）不新增错误码：名字 / role / 头像非法 → `invalid_request`（400），图片超 128KiB → `too_large`（413），
+            （身份与角色头像）不新增错误码：名字 / role / 头像非法 → `invalid_request`（400），图片超 128KiB → `too_large`（413），
             agent / 助手身份尚无所有者 → `conflict`（409），公开分享身份接口的 slug 不存在或已撤销 → `not_found`（404）。
-            M11a（项目快照与预热池）：`orb_is_pooled`（409，把线程挂到预热池里的 orb 上）。
-            M11b（runner，HTTP 状态见 docs/protocol.md）：`runner_offline`（409）、`runner_unsupported`（409，runner 的 orb 不支持冻结 / 停机 / 删除 / 快照 / 连环境 fork）、
+            （项目快照与预热池）：`orb_is_pooled`（409，把线程挂到预热池里的 orb 上）。
+            （runner，HTTP 状态见 docs/protocol.md）：`runner_offline`（409）、`runner_unsupported`（409，runner 的 orb 不支持冻结 / 停机 / 删除 / 快照 / 连环境 fork）、
             `dir_not_served`（400；经 orb 文件 / 改动代理时为 orbd 的 403）、`dir_in_use`（409，体为 `DirInUseConflict`）、`thread_required`（400）、
             `worktree_failed`（400）、`worktree_dirty`（409）。
-            M14 / M15（GitHub）：`github_not_configured`（409，尚未配置 OAuth App）、`github_identity_required`（409，所需身份未连接或需要重新授权）、
+            （GitHub）：`github_not_configured`（409，尚未配置 OAuth App）、`github_identity_required`（409，所需身份未连接或需要重新授权）、
             `github_agent_required`（409，Agent 账号未连接）、`github_not_bound`（409，项目未绑定 GitHub 仓库）、`github_upstream`（502，GitHub 请求失败）。
-            M24（项目仓库镜像）：`repo_unavailable`（503，控制面没有可用的 git）、`no_repo`（409，项目没有仓库地址）、`repo_not_ready`（409，镜像不存在、克隆中或克隆失败）、
+            （项目仓库镜像）：`repo_unavailable`（503，控制面没有可用的 git）、`no_repo`（409，项目没有仓库地址）、`repo_not_ready`（409，镜像不存在、克隆中或克隆失败）、
             `ref_not_found`、`commit_not_found`、`path_not_found`（404）、`not_a_file`、`not_a_directory`（409）、`too_large`（413）；
             Git LFS：`lfs_missing`（404）、`lfs_auth_failed`（409）、`lfs_unreachable`（502）、`lfs_corrupt`（502）、`lfs_no_space`（507）。
-            M24（托管仓库）：`repo_hosted`（409，托管项目上改外部仓库地址或同步）、`repo_exists`（409，项目已有仓库时再创建托管仓库）、
+            （托管仓库）：`repo_hosted`（409，托管项目上改外部仓库地址或同步）、`repo_exists`（409，项目已有仓库时再创建托管仓库）、
             `project_archived`（409，已归档项目上创建托管仓库）、`repo_not_hosted`（409，非托管项目上设置推送后 Webhook）。
         message:
           type: string
@@ -8642,13 +8642,13 @@ components:
     JobOp:
       type: string
       enum: [spawn, pause, snapshot, delete, delete_snapshot, set_network]
-      description: '`set_network`（M30）= 切换沙箱 orb 的网络模式，参数 `JobNetworkParams`'
+      description: '`set_network`= 切换沙箱 orb 的网络模式，参数 `JobNetworkParams`'
     JobState:
       type: string
       enum: [queued, claimed, succeeded, failed]
     ProviderDriver:
       type: string
-      description: '`runner`（M11b）= runner 的 provider 行（由 `createRunner` 建立，不经 provider 进程，不出现在 `listProviders` 中）'
+      description: '`runner`= runner 的 provider 行（由 `createRunner` 建立，不经 provider 进程，不出现在 `listProviders` 中）'
       enum: [docker, dispatch, process, firecracker, runner]
       x-enum-varnames: [Docker, Dispatch, Process, Firecracker, ProviderDriverRunner]
 
@@ -8735,7 +8735,7 @@ components:
     AppSessionCode:
       type: object
       required: [code, expiresIn]
-      description: App 会话一次性码（M6）；以 `GET /auth/app?code=…&next=…` 兑换
+      description: App 会话一次性码；以 `GET /auth/app?code=…&next=…` 兑换
       properties:
         code:
           type: string
@@ -8896,7 +8896,7 @@ components:
         name: { type: string }
         description:
           type: string
-          description: 一行描述（M24）；未设置时省略
+          description: 一行描述；未设置时省略
         repoUrl: { type: string }
         baseBranch: { type: string }
         defaultProvider:
@@ -8917,39 +8917,39 @@ components:
         defaultBrowserProfileId:
           allOf:
             - $ref: '#/components/schemas/BrowserProfileId'
-          description: 新线程（新建 orb 时）缺省选用的浏览器 Profile（M8）；未设置时省略
+          description: 新线程（新建 orb 时）缺省选用的浏览器 Profile；未设置时省略
         createdAt: { $ref: '#/components/schemas/TimestampMs' }
         updatedAt: { $ref: '#/components/schemas/TimestampMs' }
         archivedAt: { $ref: '#/components/schemas/TimestampMs' }
         snapshots:
           type: boolean
-          description: 是否为本项目建立并使用项目快照（M11a；缺省 true）
+          description: 是否为本项目建立并使用项目快照（缺省 true）
         warmOrbs:
           type: integer
           minimum: 0
           maximum: 3
-          description: 预热池里为本项目常备的 orb 数（M11a；缺省 0 = 不预热）
+          description: 预热池里为本项目常备的 orb 数（缺省 0 = 不预热）
         github:
           allOf:
             - $ref: '#/components/schemas/ProjectGitHub'
-          description: GitHub 仓库绑定（M14）；仓库地址从未解析出 GitHub 仓库 id 时省略
+          description: GitHub 仓库绑定；仓库地址从未解析出 GitHub 仓库 id 时省略
         githubGates:
           allOf:
             - $ref: '#/components/schemas/GitHubGates'
-          description: 推送 / 开 PR 门禁（M15）；未配置时省略
+          description: 推送 / 开 PR 门禁；未配置时省略
         hosted:
           type: boolean
-          description: 仓库由 Oryn 托管（M24）：仅托管项目为 true，其余省略；此时 repoUrl 恒省略
+          description: 仓库由 Oryn 托管：仅托管项目为 true，其余省略；此时 repoUrl 恒省略
         cloneUrl:
           type: string
-          description: 托管仓库的克隆地址 https://<Oryn 地址>/git/<id>.git（M24）；非托管项目省略
+          description: 托管仓库的克隆地址 https://<Oryn 地址>/git/<id>.git；非托管项目省略
         webhook:
           allOf:
             - $ref: '#/components/schemas/ProjectWebhook'
-          description: 推送后 Webhook（M24）；仅托管项目且已设置时出现；从不返回签名密钥
+          description: 推送后 Webhook；仅托管项目且已设置时出现；从不返回签名密钥
     ProjectWebhook:
       type: object
-      description: 托管仓库的推送后 Webhook（M24 阶段 ③）：每次推送成功后异步 POST 一次 JSON，不重试
+      description: 托管仓库的推送后 Webhook：每次推送成功后异步 POST 一次 JSON，不重试
       required: [url, hasSecret]
       properties:
         url: { type: string }
@@ -8990,7 +8990,7 @@ components:
         description:
           type: string
           maxLength: 200
-          description: 一行描述（M24，≤200 字符）；空串等同省略
+          description: 一行描述（≤200 字符）；空串等同省略
         repoUrl: { type: string }
         baseBranch: { type: string }
         defaultProvider: { type: string }
@@ -9014,15 +9014,15 @@ components:
           description: '默认浏览器 Profile（`bpf_…`）；空串等同省略。不存在 → 404 `profile_not_found`'
         snapshots:
           type: boolean
-          description: 项目快照开关（M11a）；缺省 true
+          description: 项目快照开关；缺省 true
         warmOrbs:
           type: integer
           minimum: 0
           maximum: 3
-          description: 预热 orb 数（M11a）；缺省 0；越界 → 400 `invalid_request`
+          description: 预热 orb 数；缺省 0；越界 → 400 `invalid_request`
         hosted:
           type: boolean
-          description: 新建 Oryn 托管仓库（M24；带一个空树的初始提交，基线分支缺省 main）；与 repoUrl 互斥；缺省 false
+          description: 新建 Oryn 托管仓库（带一个空树的初始提交，基线分支缺省 main）；与 repoUrl 互斥；缺省 false
         emptyRepo:
           type: boolean
           description: 只与 hosted 同用：不建初始提交（oryn project create --push 用，本机已有的历史才能推上来）；缺省 false
@@ -9034,7 +9034,7 @@ components:
         description:
           type: string
           maxLength: 200
-          description: 一行描述（M24，≤200 字符）；空串表示清除
+          description: 一行描述（≤200 字符）；空串表示清除
         repoUrl: { type: string }
         baseBranch: { type: string }
         defaultProvider: { type: string }
@@ -9057,27 +9057,27 @@ components:
         archived: { type: boolean }
         snapshots:
           type: boolean
-          description: 项目快照开关（M11a）
+          description: 项目快照开关
         warmOrbs:
           type: integer
           minimum: 0
           maximum: 3
-          description: 预热 orb 数（M11a）；越界 → 400 `invalid_request`
+          description: 预热 orb 数；越界 → 400 `invalid_request`
         githubListen:
           allOf:
             - $ref: '#/components/schemas/GitHubListen'
-          description: GitHub 事件回流开关（M14）
+          description: GitHub 事件回流开关
         githubGates:
           allOf:
             - $ref: '#/components/schemas/GitHubGates'
-          description: 推送 / 开 PR 门禁（M15）
+          description: 推送 / 开 PR 门禁
     ProjectSnapshotState:
       type: string
       description: '`building` 正在提交镜像；`ready` 可被新 orb 使用（同键至多一个）；`retired` 已退役、等待回收器删除镜像'
       enum: [building, ready, retired]
     ProjectSnapshot:
       type: object
-      description: 项目快照（M11a）：某项目在某 provider、某 orb 类型上跑完 setup 后的 orb 镜像；键 = (项目, provider, 类型)
+      description: 项目快照：某项目在某 provider、某 orb 类型上跑完 setup 后的 orb 镜像；键 = (项目, provider, 类型)
       required: [id, providerId, type, state, configHash, depth, lineageAt, createdAt, useCount]
       properties:
         id: { $ref: '#/components/schemas/SnapshotId' }
@@ -9127,7 +9127,7 @@ components:
           items: { $ref: '#/components/schemas/ProjectSnapshot' }
     ProjectRepoStatus:
       type: object
-      description: M24：项目仓库在控制面的裸镜像
+      description: 项目仓库在控制面的裸镜像
       required: [kind, state, available, syncing, empty]
       properties:
         kind: { type: string, enum: [mirror, hosted, none], description: '`mirror` = 外部仓库的镜像；`hosted` = Oryn 托管的正本；`none` = 项目没有仓库' }
@@ -9313,7 +9313,7 @@ components:
         lfs: { $ref: '#/components/schemas/ProjectRepoLfs' }
     ProjectRepoLfs:
       type: object
-      description: 文件是 Git LFS 指针（M24）；此时条目的 size 是对象的真实大小，oid 仍是指针 blob 的 sha
+      description: 文件是 Git LFS 指针；此时条目的 size 是对象的真实大小，oid 仍是指针 blob 的 sha
       required: [oid]
       properties:
         oid: { type: string, pattern: '^[0-9a-f]{64}$', description: LFS 对象的 sha256 }
@@ -9354,7 +9354,7 @@ components:
       properties:
         identity: { $ref: '#/components/schemas/GitIdentity' }
 
-    # ============================================================ GitHub（M14）
+    # ============================================================ GitHub
     GitHubIdentitySlot:
       type: string
       description: '`user` = 我的账号；`agent` = Agent 账号'
@@ -9374,11 +9374,11 @@ components:
         connectedAt: { $ref: '#/components/schemas/TimestampMs' }
         scopes:
           type: array
-          description: 实际授予的 OAuth scope（M15，取自 `X-OAuth-Scopes`）
+          description: 实际授予的 OAuth scope（取自 `X-OAuth-Scopes`）
           items: { type: string }
         missingScopes:
           type: array
-          description: 相对所需 scope 缺少的项（M15）；非空时需要重新授权
+          description: 相对所需 scope 缺少的项；非空时需要重新授权
           items: { type: string }
     GitHubIdentities:
       type: object
@@ -9456,7 +9456,7 @@ components:
         listen: { $ref: '#/components/schemas/GitHubListen' }
         bindStatus:
           type: string
-          description: 未绑定的原因（M15）；已绑定时省略
+          description: 未绑定的原因；已绑定时省略
           enum: [not_found, org_restricted, sso_required]
           x-enum-varnames: [GitHubBindNotFound, GitHubBindOrgRestricted, GitHubBindSsoRequired]
         hookStatus: { $ref: '#/components/schemas/GitHubHookStatus' }
@@ -9625,12 +9625,12 @@ components:
           description: 只用于 `workflow_run_completed`，其它事件忽略
     GitHubTriggerDrivers:
       type: string
-      description: '谁的发言能驱动 agent（M15）：`writers` 仅写权限者；`writers_and_author` 另加 issue / PR 作者；`anyone` 任何人（按人限流）'
+      description: '谁的发言能驱动 agent：`writers` 仅写权限者；`writers_and_author` 另加 issue / PR 作者；`anyone` 任何人（按人限流）'
       enum: [writers, writers_and_author, anyone]
       x-enum-varnames: [GitHubDriversWriters, GitHubDriversWritersAndAuthor, GitHubDriversAnyone]
     GitHubGates:
       type: object
-      description: 推送 / 开 PR 门禁（M15），由出站代理强制执行
+      description: 推送 / 开 PR 门禁，由出站代理强制执行
       required: [push, pr]
       properties:
         push: { type: boolean }
@@ -9720,7 +9720,7 @@ components:
           type: integer
           format: int64
           description: 还有更早的记录时给出，作为下一页的 `before`
-    # ---------------------------------------------------------------- sandboxes（M30）
+    # ---------------------------------------------------------------- sandboxes
     SandboxBackend:
       type: string
       description: '`kvm` = Firecracker provider；`docker` = docker provider（含 sysbox 类型）'
@@ -9781,7 +9781,7 @@ components:
         sandboxes:
           type: array
           items: { $ref: '#/components/schemas/Sandbox' }
-    # ---------------------------------------------------------------- boxes（M23）
+    # ---------------------------------------------------------------- boxes
     BoxState:
       type: string
       description: 由 box orb 的状态映射得出
@@ -10067,7 +10067,7 @@ components:
         timeoutSec: { type: integer }
     OrbSandboxExecRequest:
       type: object
-      description: 'M30：沙箱 orbd 本机路由 `POST /sandbox/exec` 的请求体（只在精简模式注册）'
+      description: '沙箱 orbd 本机路由 `POST /sandbox/exec` 的请求体（只在精简模式注册）'
       required: [command, cwd, timeoutSec]
       properties:
         command: { type: string }
@@ -10094,7 +10094,7 @@ components:
       x-enum-varnames: [OrbSandboxJobRunning, OrbSandboxJobExited]
     OrbSandboxJob:
       type: object
-      description: M30：沙箱里的一个后台作业（记录只在沙箱 orbd 内存里）
+      description: 沙箱里的一个后台作业（记录只在沙箱 orbd 内存里）
       required: [id, command, state, startedAt, logBytes, logTruncated]
       properties:
         id: { type: string }
@@ -10116,7 +10116,7 @@ components:
           items: { $ref: '#/components/schemas/OrbSandboxJob' }
     OrbSandboxJobLog:
       type: object
-      description: 'M30：`GET /sandbox/jobs/{id}/log` 的结果；单次至多 256 KiB'
+      description: '`GET /sandbox/jobs/{id}/log` 的结果；单次至多 256 KiB'
       required: [text, offset, nextOffset, eof, state]
       properties:
         text: { type: string }
@@ -10129,7 +10129,7 @@ components:
         exit: { type: integer }
     OrbFsTarResult:
       type: object
-      description: 'M30：`PUT /fs/tar` 的结果'
+      description: '`PUT /fs/tar` 的结果'
       required: [files, bytes, skipped]
       properties:
         files: { type: integer }
@@ -10159,7 +10159,7 @@ components:
         apps:
           type: array
           items: { $ref: '#/components/schemas/OrbBoxAppState' }
-    # ---------------------------------------------------------------- ssh（M18）
+    # ---------------------------------------------------------------- ssh
     SshHostId:
       type: string
       description: '`ssh_<ULID>`'
@@ -10679,7 +10679,7 @@ components:
       properties:
         enabled:
           type: boolean
-          description: M33：agent 是否可以用 render_ui / render_html 在对话里给出视图（关闭后不注册工具、不注入指引）
+          description: agent 是否可以用 render_ui / render_html 在对话里给出视图（关闭后不注册工具、不注入指引）
     SelectionAction:
       type: object
       required: [id, name, prompt]
@@ -10889,7 +10889,7 @@ components:
         note: { type: string }
         turnId:
           type: string
-          description: 写入这个版本的 agent 回合（M29，orb 扩展生成）；同一回合的版本相同。省略 = 不属于任何回合
+          description: 写入这个版本的 agent 回合（orb 扩展生成）；同一回合的版本相同。省略 = 不属于任何回合
         title:
           type: string
           description: 回合标题（用户输入的首行，最多 200 个字符）；省略 = 无
@@ -11046,7 +11046,7 @@ components:
           description: 规则相关的测量值（数字或字符串）
     ArtifactCheck:
       type: object
-      description: 设计检查结果（M29，`artifact_versions.check_json`）
+      description: 设计检查结果（`artifact_versions.check_json`）
       required: [status, issues]
       properties:
         status: { $ref: '#/components/schemas/ArtifactCheckStatus' }
@@ -11102,7 +11102,7 @@ components:
           description: 页面能否用 `sample` 能力向模型提问
         office:
           type: object
-          description: Office 引擎能力（M32）；没有配置引擎时两项都为 false
+          description: Office 引擎能力；没有配置引擎时两项都为 false
           required: [edit, convert]
           properties:
             edit:
@@ -11446,7 +11446,7 @@ components:
         autoPublish:
           type: boolean
           description: 把新建的 artifact 以私有方式发布，并跟着最新版本更新
-    # ============================================================ memory（M16）
+    # ============================================================ memory
     MemoryPurpose:
       type: string
       description: 'Hindsight 调用模型的用途；未单独指定的用途跟随 `default`'
@@ -11743,7 +11743,7 @@ components:
           x-enum-varnames: [MemoryExportRunning, MemoryExportDone, MemoryExportFailed]
         error: { type: string }
         createdAt: { type: integer, format: int64 }
-    # ============================================================ owner memory（M17）
+    # ============================================================ owner memory
     OwnerMemoryDecideEndpoint:
       type: object
       required: [baseUrl, model, hasKey]
@@ -11763,7 +11763,7 @@ components:
       required: [enabled, available, ownerNames]
       properties:
         enabled: { type: boolean, description: 助手记忆开关 }
-        available: { type: boolean, description: M16 记忆已启用且已配置；为假时助手记忆不运行 }
+        available: { type: boolean, description: 记忆已启用且已配置；为假时助手记忆不运行 }
         ownerNames:
           type: array
           description: 主人的名字与别名，写入时这些名字一律归为「主人」
@@ -11785,7 +11785,7 @@ components:
         state:
           type: string
           description: |
-            `unavailable`（M16 记忆未启用或未配置）、`disabled`（助手记忆关闭）、`ok`、`error`（连不上 Hindsight 等，见 error）。
+            `unavailable`（记忆未启用或未配置）、`disabled`（助手记忆关闭）、`ok`、`error`（连不上 Hindsight 等，见 error）。
           enum: [unavailable, disabled, ok, error]
           x-enum-varnames: [OwnerMemoryStateUnavailable, OwnerMemoryStateDisabled, OwnerMemoryStateOk, OwnerMemoryStateError]
         memoryCount: { type: integer, format: int64, description: bank `oryn-owner` 的记忆数 }
@@ -11952,7 +11952,7 @@ components:
     LinkCtlAgentMemory:
       type: object
       description: |
-        M16：本次 agent 启用 Hindsight 记忆（字段缺省 = 不启用）。orbd 写 `--config` 覆盖文件（`memory.backend: hindsight`、
+        本次 agent 启用 Hindsight 记忆（字段缺省 = 不启用）。orbd 写 `--config` 覆盖文件（`memory.backend: hindsight`、
         `hindsight.globalScope: true`），注入 `HINDSIGHT_API_URL=http://127.0.0.1:7811/memory/t/<threadId>`、`HINDSIGHT_BANK_ID=oryn`、
         `HINDSIGHT_SCOPING=per-project-tagged`、`NO_PROXY`；有 `project` 时注入 `ORYN_HINDSIGHT_PROJECT`，`autoRetain` 为假时注入
         `HINDSIGHT_AUTO_RETAIN=false`。只有 hello 含 `memory` 的 orbd 会收到。
@@ -11977,7 +11977,7 @@ components:
         thinkingLevel: { type: string }
     AssistantSettings:
       type: object
-      description: 全局助手的设置（M19）
+      description: 全局助手的设置
       required: [webAccess, disabledMcpServers, computer]
       properties:
         webAccess:
@@ -12054,7 +12054,7 @@ components:
           items: { $ref: '#/components/schemas/AssistantMcpTool' }
     ResearchSettings:
       type: object
-      description: 全局助手后台研究的设置（M26）
+      description: 全局助手后台研究的设置
       required: [enabled, web, mine, internal, mcp, dailyUsd, preferences, mcpTools]
       properties:
         enabled:
@@ -12189,7 +12189,7 @@ components:
           items: { $ref: '#/components/schemas/ResearchRun' }
     AssistantNotes:
       type: object
-      description: 主线备忘（M19，助手每段开头带上）
+      description: 主线备忘（助手每段开头带上）
       required: [text]
       properties:
         text:
@@ -12201,7 +12201,7 @@ components:
           readOnly: true
     AssistantComputer:
       type: object
-      description: 助手的电脑（M19）
+      description: 助手的电脑
       required: [toolsReady]
       properties:
         orbId:
@@ -12225,7 +12225,7 @@ components:
         memoryMB: { type: integer }
         features:
           type: array
-          description: '该类型 orb 的可选能力（M11a）：`docker` = orb 内可用 Docker（嵌套 Docker，由 orbd 监督 dockerd）'
+          description: '该类型 orb 的可选能力：`docker` = orb 内可用 Docker（嵌套 Docker，由 orbd 监督 dockerd）'
           items: { type: string }
     ProviderCapabilities:
       type: object
@@ -12238,7 +12238,7 @@ components:
           description: 能经 `/provider/v1/fs/*` 只读读取停机 orb 的文件（缺省 false）
         sandbox:
           type: boolean
-          description: M30：provider 开启了沙箱，认识 `JobSpawnParams.sandbox` 与 `set_network`（缺省 false）
+          description: provider 开启了沙箱，认识 `JobSpawnParams.sandbox` 与 `set_network`（缺省 false）
     Provider:
       type: object
       required: [id, name, online, orbTypes, createdAt]
@@ -12359,7 +12359,7 @@ components:
           description: 未删除的 Box 常驻 orb 数
         sandboxes:
           type: integer
-          description: 未删除的 agent 沙箱 orb 数（M30）
+          description: 未删除的 agent 沙箱 orb 数
         computers:
           type: integer
           description: 未删除的助手电脑 orb 数
@@ -12442,7 +12442,7 @@ components:
         box: { type: boolean }
         sandbox:
           type: boolean
-          description: M30：agent 沙箱
+          description: agent 沙箱
         computer: { type: boolean }
         automation: { type: boolean }
         nestedDocker: { type: boolean }
@@ -12498,7 +12498,7 @@ components:
           type: array
           items: { $ref: '#/components/schemas/ProviderOverviewItem' }
 
-    # ============================================================ runner（M11b）
+    # ============================================================ runner
     RunnerDir:
       type: object
       description: runner 声明（`orbd run --runner --dir`）的一个可用目录
@@ -12572,7 +12572,7 @@ components:
     DirInUseConflict:
       type: object
       description: |
-        `createThread` 的 `executor.kind = runner` 未要求 worktree、未给 `shareDir`，而该目录已是其它未归档线程的工作目录时的 409 体（M11b）。
+        `createThread` 的 `executor.kind = runner` 未要求 worktree、未给 `shareDir`，而该目录已是其它未归档线程的工作目录时的 409 体。
         客户端据此让用户在「新建 worktree」与「仍然共用（`shareDir: true`）」之间选择后重发。
       required: [code, message, threadIds]
       properties:
@@ -12604,7 +12604,7 @@ components:
           description: base64
         mimeType: { type: string }
     ThreadExecutor:
-      description: 线程执行位置（`runner` 为 M11b，`box` 为 M23）
+      description: 线程执行位置（`runner`，`box`）
       oneOf:
         - $ref: '#/components/schemas/ThreadExecutorNewOrb'
         - $ref: '#/components/schemas/ThreadExecutorOrb'
@@ -12640,7 +12640,7 @@ components:
         orbId: { $ref: '#/components/schemas/OrbId' }
     ThreadExecutorRunner:
       type: object
-      description: 在 runner 上执行（M11b）：工作目录为 `dir`，或在 `dir`（须是 git 仓库）旁新建的 worktree
+      description: 在 runner 上执行：工作目录为 `dir`，或在 `dir`（须是 git 仓库）旁新建的 worktree
       required: [kind, runnerId, dir]
       properties:
         kind:
@@ -12657,7 +12657,7 @@ components:
           description: 为真时允许与其它线程共用同一工作目录（不检查 `dir_in_use`）
     ThreadExecutorBox:
       type: object
-      description: 在 box 上执行（M23）：省略 `app` = 机器（工作目录 `~`），否则 `~/apps/<app>/current`；工作目录由服务端决定
+      description: 在 box 上执行：省略 `app` = 机器（工作目录 `~`），否则 `~/apps/<app>/current`；工作目录由服务端决定
       required: [kind, boxId]
       properties:
         kind:
@@ -12679,7 +12679,7 @@ components:
           description: worktree 与分支的名字（目录 `<repo 的父目录>/<repo 名>-<name>`，重名依次加 `-2`、`-3`…）
     ThreadWorktree:
       type: object
-      description: Oryn 为 runner 线程建的 worktree（M11b）
+      description: Oryn 为 runner 线程建的 worktree
       required: [repo, dir, branch]
       properties:
         repo:
@@ -12720,7 +12720,7 @@ components:
         browserProfileId:
           type: string
           description: |
-            新 orb 选用的浏览器 Profile（M8；只对 `executor.kind = new_orb` 有效，挂到已有 orb 时给非空值 → 400 `invalid`）：
+            新 orb 选用的浏览器 Profile（只对 `executor.kind = new_orb` 有效，挂到已有 orb 时给非空值 → 400 `invalid`）：
             省略 = 用项目的 `defaultBrowserProfileId`；空串 = 不用；`bpf_…` = 指定（不存在 → 404 `profile_not_found`）。
         profileMode:
           allOf:
@@ -12729,7 +12729,7 @@ components:
         spaceId:
           allOf:
             - $ref: '#/components/schemas/SpaceId'
-          description: 新线程加入该 Space（M9；不存在 → 404 `space_not_found`）；未给 `projectId` 时取 Space 的项目
+          description: 新线程加入该 Space（不存在 → 404 `space_not_found`）；未给 `projectId` 时取 Space 的项目
     Thread:
       type: object
       required: [id, title, titleSource, state, stateChangedAt, pinned, labels, unread, createdAt, updatedAt]
@@ -12793,41 +12793,41 @@ components:
         kind:
           allOf:
             - $ref: '#/components/schemas/ThreadKind'
-          description: 线程种类（M9）；省略 = `work`
+          description: 线程种类；省略 = `work`
         spaceId:
           allOf:
             - $ref: '#/components/schemas/SpaceId'
-          description: 所属 Space（M9）
+          description: 所属 Space
         shippedAt:
           allOf:
             - $ref: '#/components/schemas/TimestampMs'
-          description: '标记为已交付的时间（M9，`PATCH {shipped: true}`）'
+          description: '标记为已交付的时间（`PATCH {shipped: true}`）'
         schedule:
           allOf:
             - $ref: '#/components/schemas/ThreadScheduleSummary'
-          description: 该线程的线程内定时（M9）；没有则省略
+          description: 该线程的线程内定时；没有则省略
         scheduleRun:
           allOf:
             - $ref: '#/components/schemas/ThreadScheduleRun'
-          description: 由「新建线程」定时创建时给出（M9）
+          description: 由「新建线程」定时创建时给出
         cwd:
           type: string
-          description: 线程的工作目录（M11b，runner 线程的绝对路径）；普通 orb 线程省略
+          description: 线程的工作目录（runner 线程的绝对路径）；普通 orb 线程省略
         worktree:
           allOf:
             - $ref: '#/components/schemas/ThreadWorktree'
-          description: Oryn 为该线程建的 worktree（M11b）；没有或已移除则省略
+          description: Oryn 为该线程建的 worktree；没有或已移除则省略
         pulls:
           type: array
-          description: 关联的 GitHub PR（M14）；没有则省略
+          description: 关联的 GitHub PR；没有则省略
           items: { $ref: '#/components/schemas/ThreadPull' }
         githubTask:
           allOf:
             - $ref: '#/components/schemas/GitHubThreadTask'
-          description: 触发规则建立的 issue 任务或发布哨兵状态（M15）；没有则省略
+          description: 触发规则建立的 issue 任务或发布哨兵状态；没有则省略
         main:
           type: boolean
-          description: 是否为全局助手的主线对话（M19，`kind = assistant` 的单例）；不是则省略
+          description: 是否为全局助手的主线对话（`kind = assistant` 的单例）；不是则省略
     ThreadError:
       type: object
       description: |
@@ -12931,10 +12931,10 @@ components:
         unread: { type: boolean }
         spaceId:
           type: string
-          description: 加入 Space（`spc_…`，不存在 → 404 `space_not_found`）；空串 = 移出 Space。只对 `kind = work` 的线程有效（M9）
+          description: 加入 Space（`spc_…`，不存在 → 404 `space_not_found`）；空串 = 移出 Space。只对 `kind = work` 的线程有效
         shipped:
           type: boolean
-          description: '`true` 标记为已交付（记 `shippedAt`，未归档则同时归档）；`false` 清除标记（M9）'
+          description: '`true` 标记为已交付（记 `shippedAt`，未归档则同时归档）；`false` 清除标记'
     ForkThreadRequest:
       type: object
       required: [env]
@@ -13026,64 +13026,64 @@ components:
           description: 最近一次 `phase=resume` 的运行
         services:
           type: array
-          description: orbd 上报的受管服务（控制面镜像，M4）；orb 已删除时省略
+          description: orbd 上报的受管服务（控制面镜像）；orb 已删除时省略
           items: { $ref: '#/components/schemas/OrbService' }
         portals:
           type: array
-          description: 有 portal 的服务端口（M4）；orb 已删除时省略
+          description: 有 portal 的服务端口；orb 已删除时省略
           items: { $ref: '#/components/schemas/OrbPortal' }
         desktop:
           allOf:
             - $ref: '#/components/schemas/OrbDesktop'
-          description: 桌面镜像（M8）；orbd 上报过 `desktop.state` 才有，orb 已删除时省略
+          description: 桌面镜像；orbd 上报过 `desktop.state` 才有，orb 已删除时省略
         coordinator:
           type: boolean
-          description: 协调 orb（M9，provider `@host`，跑在控制面宿主上的协调宿主）；为 false 时省略
+          description: 协调 orb（provider `@host`，跑在控制面宿主上的协调宿主）；为 false 时省略
         pool:
           allOf:
             - $ref: '#/components/schemas/OrbPoolState'
-          description: 预热池状态（M11a）；不是池 orb 时省略
+          description: 预热池状态；不是池 orb 时省略
         snapshotKind:
           allOf:
             - $ref: '#/components/schemas/OrbSnapshotKind'
           description: '`snapshotOf` 非空时给出：`project` = 项目快照，`fork` = 连环境 fork 的快照'
         nestedDocker:
           type: boolean
-          description: 该 orb 的类型声明了 `docker` 特性（M11a，orb 内可用 Docker）
+          description: 该 orb 的类型声明了 `docker` 特性（orb 内可用 Docker）
         kind:
           allOf:
             - $ref: '#/components/schemas/OrbKind'
-          description: 省略 = `orb`（M11b）
+          description: 省略 = `orb`
         features:
           type: array
           description: |
-            orbd 的特性（同 `LinkCtlHelloParams.features`，M11b）：有活动 link 时取其 hello；没有时 runner 取最近一次上报的，普通 orb 省略。
-            客户端据此决定右面板标签：`changes` 需要 `git`、`files` 需要 `fs`、`terminal` 需要 `terminal`；省略时保持 M3 的行为。
+            orbd 的特性（同 `LinkCtlHelloParams.features`）：有活动 link 时取其 hello；没有时 runner 取最近一次上报的，普通 orb 省略。
+            客户端据此决定右面板标签：`changes` 需要 `git`、`files` 需要 `fs`、`terminal` 需要 `terminal`；省略时保持 的行为。
           items: { type: string }
         githubLogin:
           type: string
-          description: orb 内 git / gh 使用的 GitHub 账号（M15）：工作 orb 的身份槽位已连接且可用时给出，与项目是否绑定无关；runner、协调宿主或槽位未连接 / 待重新授权时省略
+          description: orb 内 git / gh 使用的 GitHub 账号：工作 orb 的身份槽位已连接且可用时给出，与项目是否绑定无关；runner、协调宿主或槽位未连接 / 待重新授权时省略
         automation:
           type: boolean
           readOnly: true
-          description: M18：这台 orb 由全自动入口（定时、GitHub 触发等）建立；为真时只能用放开了「允许全自动线程使用」的 SSH 主机。缺省 = false
+          description: 这台 orb 由全自动入口（定时、GitHub 触发等）建立；为真时只能用放开了「允许全自动线程使用」的 SSH 主机。缺省 = false
         computer:
           type: boolean
-          description: 助手的电脑（M19，全库至多一台，线程不能挂上去）；为 false 时省略
+          description: 助手的电脑（全库至多一台，线程不能挂上去）；为 false 时省略
         box:
           type: boolean
-          description: box 的常驻 orb（M23）；为 false 时省略
+          description: box 的常驻 orb；为 false 时省略
         sandbox:
           type: boolean
-          description: M30：agent 沙箱（由创建它的线程管理）；为 false 时省略
+          description: agent 沙箱（由创建它的线程管理）；为 false 时省略
     OrbKind:
       type: string
-      description: '`orb` = provider 创建的 orb；`runner` = runner 的常驻 orb（M11b）'
+      description: '`orb` = provider 创建的 orb；`runner` = runner 的常驻 orb'
       enum: [orb, runner]
       x-enum-varnames: [OrbKindOrb, OrbKindRunner]
     OrbWhoami:
       type: object
-      description: '`GET /orb/v1/whoami` 的结果（M11b）'
+      description: '`GET /orb/v1/whoami` 的结果'
       required: [orbId, kind]
       properties:
         orbId: { $ref: '#/components/schemas/OrbId' }
@@ -13114,10 +13114,10 @@ components:
           description: 项目设置里配置了该阶段脚本
         prepared:
           type: boolean
-          description: '本次开始时 `setup.done` 标记已存在（M11a：例如来自项目快照）'
+          description: '本次开始时 `setup.done` 标记已存在（例如来自项目快照）'
         baseCommit:
           type: string
-          description: 结束时检出的提交（40 位十六进制，M11a）；无仓库时省略
+          description: 结束时检出的提交（40 位十六进制）；无仓库时省略
     SetupPhase:
       type: string
       enum: [setup, resume]
@@ -13128,7 +13128,7 @@ components:
       enum: [auto, manual]
     OrbPoolState:
       type: string
-      description: '预热池状态（M11a）：`warming` 已创建、尚未就绪；`idle` 就绪或冻结、可认领；`claimed` 已被线程认领、正在刷新'
+      description: '预热池状态：`warming` 已创建、尚未就绪；`idle` 就绪或冻结、可认领；`claimed` 已被线程认领、正在刷新'
       enum: [warming, idle, claimed]
     OrbSnapshotKind:
       type: string
@@ -13168,7 +13168,7 @@ components:
         name: { type: string, pattern: '^[a-z0-9][a-z0-9-]{0,31}$' }
         source:
           type: string
-          description: '`file` = `.oryn/services.yaml`（或 `.amp/services.yaml`）；`dynamic` = `oryn orb service start --command`；`app` = box app 的服务（M23，名字为 `<app>--<svc>`）'
+          description: '`file` = `.oryn/services.yaml`（或 `.amp/services.yaml`）；`dynamic` = `oryn orb service start --command`；`app` = box app 的服务（名字为 `<app>--<svc>`）'
           enum: [file, dynamic, app]
         command: { type: string, maxLength: 4096 }
         cwd:
@@ -13204,7 +13204,7 @@ components:
         startedAt: { $ref: '#/components/schemas/TimestampMs' }
         app:
           type: string
-          description: 所属 box app（M23；`source = app` 时给出）
+          description: 所属 box app（`source = app` 时给出）
     OrbPortal:
       type: object
       required: [port, service, links]
@@ -13245,7 +13245,7 @@ components:
       properties:
         duration: { $ref: '#/components/schemas/PortalShareDuration' }
 
-    # ============================================================ M8：Desktop 与浏览器 Profile
+    # ============================================================ Desktop 与浏览器 Profile
     OrbBrowserStatus:
       type: string
       description: orb 桌面上唯一那个 Chromium 的状态（由 orbd 启动；进程退出后不自动重启，也不做空闲回收）
@@ -13441,12 +13441,12 @@ components:
         apps:
           type: array
           maxItems: 16
-          description: 任务栏应用（M25，按任务栏顺序）；旧 orbd（hello 不含 `desktop-apps`）未上报或 orb 不在运行时省略
+          description: 任务栏应用（按任务栏顺序）；旧 orbd（hello 不含 `desktop-apps`）未上报或 orb 不在运行时省略
           items: { $ref: '#/components/schemas/OrbDesktopApp' }
         windows:
           type: array
           maxItems: 32
-          description: 顶层窗口（M25，按 `_NET_CLIENT_LIST` 顺序）；省略条件同 `apps`
+          description: 顶层窗口（按 `_NET_CLIENT_LIST` 顺序）；省略条件同 `apps`
           items: { $ref: '#/components/schemas/OrbDesktopWindow' }
     OrbDesktopControlState:
       type: string
@@ -13504,7 +13504,7 @@ components:
       description: 桌面应用 id（取自镜像清单 `/usr/local/share/oryn/desktop-apps.json`；内置 `chromium`）
     OrbDesktopApp:
       type: object
-      description: 任务栏上的一个应用（M25）
+      description: 任务栏上的一个应用
       required: [id, name, running, launching]
       properties:
         id: { $ref: '#/components/schemas/OrbDesktopAppId' }
@@ -13524,7 +13524,7 @@ components:
       description: X 窗口 id 的十进制
     OrbDesktopWindow:
       type: object
-      description: 桌面上的一个顶层窗口（M25；取自窗口管理器的 `_NET_CLIENT_LIST`）
+      description: 桌面上的一个顶层窗口（取自窗口管理器的 `_NET_CLIENT_LIST`）
       required: [id, title, active, minimized]
       properties:
         id: { $ref: '#/components/schemas/OrbDesktopWindowId' }
@@ -13593,7 +13593,7 @@ components:
           type: array
           items: { $ref: '#/components/schemas/OrbMetricSample' }
 
-    # ============================================================ M9：Space、全局助手、定时与协调宿主
+    # ============================================================ Space、全局助手、定时与协调宿主
     ThreadKind:
       type: string
       description: |
@@ -14063,7 +14063,7 @@ components:
           x-enum-varnames: [OriginOwner, OriginAuto]
         action:
           type: string
-          description: 工具名（M19 起全局助手有更多写类工具；经确认卡执行的记 `origin = owner`）。`api_call` 是全局助手经 `oryn` 工具执行的 REST 操作，`summary` 以 operationId 开头
+          description: 工具名（起全局助手有更多写类工具；经确认卡执行的记 `origin = owner`）。`api_call` 是全局助手经 `oryn` 工具执行的 REST 操作，`summary` 以 operationId 开头
           enum: [create_thread, send_message, archive_thread, set_schedule, delete_schedule, update_thread, abort_thread,
             set_thread_model, fork_thread, wake_thread, delete_thread, create_project, update_project, delete_project,
             create_space, update_space, delete_space, set_trigger, delete_trigger, pause_orb, wake_orb, delete_orb,
@@ -14204,7 +14204,7 @@ components:
           items: { $ref: '#/components/schemas/AgentConfigWarning' }
     AgentConfigApplyStatus:
       type: object
-      description: omp 配置在会话上的生效状态（M13）
+      description: omp 配置在会话上的生效状态
       required: [threads, pendingReloads, push]
       properties:
         threads:
@@ -14265,7 +14265,7 @@ components:
           description: 已安排重启的线程（按 id 排序）
           items: { type: string }
 
-    # ============================================================ 统计（M10）
+    # ============================================================ 统计
     StatsGrain:
       type: string
       description: 时间粒度（按请求的 `tz` 取自然小时 / 日 / 周（周一为始）/ 月）
@@ -14687,7 +14687,7 @@ components:
         month: { $ref: '#/components/schemas/BudgetPeriod' }
 
     # ============================================================ 客户端 WebSocket
-    # ============================================================ orb 文件 / 改动 / 附件（M3）
+    # ============================================================ orb 文件 / 改动 / 附件
     FsRoots:
       type: object
       required: [home, workdir]
@@ -14947,7 +14947,7 @@ components:
           type: string
           description: '`$HOME/.oryn/attachments/<threadId>/<id>/<safeName>` 的绝对路径'
 
-    # ============================================================ 公开分享与文件发布（M5）
+    # ============================================================ 公开分享与文件发布
     ShareMode:
       type: string
       description: '`snapshot` 固化创建时刻扫描过的条目集合与标题（`untilSeq` + 当时的叶子）；`live` 持续跟随当前叶子'
@@ -14992,7 +14992,7 @@ components:
           description: 已检查扫描命中项，仍然分享
     ShareFindingRule:
       type: string
-      description: 密钥扫描规则名（规则表见 docs/protocol.md M5 节）
+      description: 密钥扫描规则名（规则表见 docs/protocol.md 节）
       enum:
         - vault_secret
         - private_key
@@ -15156,7 +15156,7 @@ components:
         entries:
           type: array
           description: |
-            公开过滤后的条目。`custom` 条目只保留 Oryn 的模型选择来源记录（`customType = oryn-model-source`，M9.6），payload 为
+            公开过滤后的条目。`custom` 条目只保留 Oryn 的模型选择来源记录（`customType = oryn-model-source`），payload 为
             `{"type":"custom","customType":"oryn-model-source","data":{v, source, model, role?, alias?}}`，其中 `role` / `alias`
             是每个分享各不相同的不透明键（对应 `PublicRoleIdentity.key`）；其它 `custom` 条目的 payload 清空为 `{"type":"custom"}`。
           items: { $ref: '#/components/schemas/Entry' }
@@ -15209,14 +15209,14 @@ components:
         avatarIcon: { type: string, maxLength: 64 }
         avatarImage: { type: string, maxLength: 131072 }
 
-    # ============================================================ 通知（M5）
+    # ============================================================ 通知
     NotificationKind:
       type: string
       description: '`done` 回合完成、`input` 等待作答、`error` 出错、`budget` 预算告警（不属于任何线程）；也是渠道 `events` 的元素'
       enum: [done, input, error, budget]
     NotificationDeliveryTarget:
       type: string
-      description: 投递目标（`gateway` 为官方推送网关，M28）
+      description: 投递目标（`gateway` 为官方推送网关）
       enum: [telegram, webhook, ntfy, bark, webpush, gateway]
     NotificationDeliveryStatus:
       type: string
@@ -15517,7 +15517,7 @@ components:
           description: 本机主机公钥：base64url（无填充）的 32 字节 Ed25519 公钥
     PushSubscriptionKind:
       type: string
-      description: '`webpush` 为 Web Push / UnifiedPush；`gateway` 为官方推送网关（M28，`endpoint` 为 `<网关 origin>/v1/grants/<grant>`）'
+      description: '`webpush` 为 Web Push / UnifiedPush；`gateway` 为官方推送网关（`endpoint` 为 `<网关 origin>/v1/grants/<grant>`）'
       enum: [webpush, gateway]
     PushSubscription:
       type: object
@@ -15552,7 +15552,7 @@ components:
       description: |
         两种形态，按 `kind` 区分（缺省 `webpush`）：
         - `webpush`：浏览器 `PushSubscription.toJSON()` 的子集，须带 `endpoint` 与 `keys`（Android 的 UnifiedPush 同此形态）；
-        - `gateway`：带 `gateway`、`grant` 与 `keys`（载荷加密用，必填），不得带 `endpoint`（M28，iOS 包与 Android `gms` 包）。
+        - `gateway`：带 `gateway`、`grant` 与 `keys`（载荷加密用，必填），不得带 `endpoint`（iOS 包与 Android `gms` 包）。
       properties:
         kind:
           type: string
@@ -15570,7 +15570,7 @@ components:
           pattern: '^[A-Za-z0-9_-]{22}$'
           description: '网关授权 id（`kind: gateway` 时必填）'
 
-    # ============================================================ oryn sync（M5）
+    # ============================================================ oryn sync
     OrbSyncPrepareRequest:
       type: object
       properties:
@@ -15689,7 +15689,7 @@ components:
           minimum: 50
           maximum: 2000
           description: |
-            只补发最近的 `tail` 条（M19，主线页面用）：仅在实际从 seq 0 补发时生效，快照的 `windowStart` 给出窗口起点，
+            只补发最近的 `tail` 条（主线页面用）：仅在实际从 seq 0 补发时生效，快照的 `windowStart` 给出窗口起点，
             更早的条目经 `GET /threads/{id}/entries?before=` 翻页。越界值夹到 50–2000。
     WsClientUnsub:
       type: object
@@ -15922,7 +15922,7 @@ components:
           type: integer
           format: int64
           description: |
-            带 `tail` 订阅时补发窗口的起点（M19）：只补发 `seq > windowStart` 的条目，更早的经 REST `before` 翻页；
+            带 `tail` 订阅时补发窗口的起点：只补发 `seq > windowStart` 的条目，更早的经 REST `before` 翻页；
             省略或 0 = 没有开窗
     WsServerEntries:
       type: object
@@ -16089,26 +16089,26 @@ components:
         type: { type: string, enum: [github.changed], x-enum-varnames: [WsServerGitHubChangedTypeGitHubChanged] }
     WsServerSshChanged:
       type: object
-      description: M18：SSH 主机、钥匙、指纹或测试结果变了；发给全部私有连接。客户端据此让 SSH 相关查询失效
+      description: SSH 主机、钥匙、指纹或测试结果变了；发给全部私有连接。客户端据此让 SSH 相关查询失效
       required: [type]
       properties:
         type: { type: string, enum: [ssh.changed], x-enum-varnames: [WsServerSshChangedTypeSshChanged] }
     WsServerBoxesChanged:
       type: object
-      description: M23：box、app、部署、活动或 box 上的线程变了；发给全部私有连接。客户端据此让 Boxes 相关查询失效，WS 每次重新 open 后也要自行失效一次
+      description: box、app、部署、活动或 box 上的线程变了；发给全部私有连接。客户端据此让 Boxes 相关查询失效，WS 每次重新 open 后也要自行失效一次
       required: [type]
       properties:
         type: { type: string, enum: [boxes.changed], x-enum-varnames: [WsServerBoxesChangedTypeBoxesChanged] }
     WsServerSandboxesChanged:
       type: object
-      description: M30：某线程名下的沙箱变了（创建、就绪、网络、续期、销毁）；发给全部私有连接。客户端让该线程的沙箱查询失效，WS 每次重新 open 后也要自行失效一次
+      description: 某线程名下的沙箱变了（创建、就绪、网络、续期、销毁）；发给全部私有连接。客户端让该线程的沙箱查询失效，WS 每次重新 open 后也要自行失效一次
       required: [type, threadId]
       properties:
         type: { type: string, enum: [sandboxes.changed], x-enum-varnames: [WsServerSandboxesChangedTypeSandboxesChanged] }
         threadId: { $ref: '#/components/schemas/ThreadId' }
     WsServerProjectRepoChanged:
       type: object
-      description: M24：项目仓库镜像状态变了（开始 / 结束克隆或拉取、出错、被删除）；发给全部私有连接。客户端让该项目的仓库查询失效，WS 每次重新 open 后对全部项目失效一次
+      description: 项目仓库镜像状态变了（开始 / 结束克隆或拉取、出错、被删除）；发给全部私有连接。客户端让该项目的仓库查询失效，WS 每次重新 open 后对全部项目失效一次
       required: [type, projectId]
       properties:
         type: { type: string, enum: [project_repo.changed], x-enum-varnames: [WsServerProjectRepoChangedTypeProjectRepoChanged] }
@@ -16223,7 +16223,7 @@ components:
               type: string
               description: 该文件属于画布的某个画框时为画框 id
 
-    # ============================================================ 匿名分享 WebSocket（M5）
+    # ============================================================ 匿名分享 WebSocket
     WsPublicServerMessage:
       description: |
         `GET /api/v1/public/shares/{slug}/ws` 上服务端 → 匿名客户端的消息（都不带 `threadId`）。
@@ -16346,7 +16346,7 @@ components:
         baseImageId:
           type: string
           description: |
-            驱动当前基础镜像的身份（M11a；docker = 镜像 id，process = `process`，dispatch = `ref:<镜像引用>`）。
+            驱动当前基础镜像的身份（docker = 镜像 id，process = `process`，dispatch = `ref:<镜像引用>`）。
             空或缺省 = 未知，控制面对该 provider 不启用项目快照。
         hostMetrics:
           allOf:
@@ -16483,14 +16483,14 @@ components:
         env: { $ref: '#/components/schemas/JobSpawnEnv' }
         snapshotOptional:
           type: boolean
-          description: 'M11a：true = `snapshotId` 对应的快照不存在时退回基础镜像（输出里写一行说明），不算失败；false / 缺省 = 快照必须存在'
+          description: 'true = `snapshotId` 对应的快照不存在时退回基础镜像（输出里写一行说明），不算失败；false / 缺省 = 快照必须存在'
         orbCaPem:
           type: string
-          description: 'M11a 审查修复：orb link 的 TLS CA 证书（PEM）。非空时 provider 以环境变量 `ORYN_ORB_CA_PEM` 下发给 orb（走调用方环境，不进 argv），dispatch 脚本也拿到同名环境变量；orbd 拨 `ORYN_URL` 时只信任这张 CA'
+          description: '审查修复：orb link 的 TLS CA 证书（PEM）。非空时 provider 以环境变量 `ORYN_ORB_CA_PEM` 下发给 orb（走调用方环境，不进 argv），dispatch 脚本也拿到同名环境变量；orbd 拨 `ORYN_URL` 时只信任这张 CA'
         sandbox:
           allOf:
             - $ref: '#/components/schemas/JobSpawnSandbox'
-          description: M30：非空 = 这台 orb 是 agent 沙箱（精简模式 orbd，link 经 provider 中继）
+          description: 非空 = 这台 orb 是 agent 沙箱（精简模式 orbd，link 经 provider 中继）
     SandboxNetwork:
       type: string
       description: '`none` = 完全没有网卡；`egress` = 可访问公网'
@@ -16503,7 +16503,7 @@ components:
         network: { $ref: '#/components/schemas/SandboxNetwork' }
     JobNetworkParams:
       type: object
-      description: '`set_network` 任务参数（M30）；创建时为 `none` 的沙箱不能切到 `egress`（错误文本以 `network_unavailable:` 开头）'
+      description: '`set_network` 任务参数；创建时为 `none` 的沙箱不能切到 `egress`（错误文本以 `network_unavailable:` 开头）'
       required: [network]
       properties:
         network: { $ref: '#/components/schemas/SandboxNetwork' }
@@ -16527,7 +16527,7 @@ components:
         snapshotId: { $ref: '#/components/schemas/SnapshotId' }
     JobResult:
       type: object
-      description: 任务的结构化结果（M11a，随完成上报）
+      description: 任务的结构化结果（随完成上报）
       properties:
         snapshotBytes:
           type: integer
@@ -16536,7 +16536,7 @@ components:
         snapshotUsed:
           type: boolean
           description: |
-            M11a 审查修复，`spawn` 任务专用：true = 容器 / 目录实际来自 `snapshotId` 的快照，false = 退回了基础镜像。
+            审查修复，`spawn` 任务专用：true = 容器 / 目录实际来自 `snapshotId` 的快照，false = 退回了基础镜像。
             docker 看快照镜像是否存在；process 看快照目录是否存在；dispatch 由脚本在输出里打一行 `ORYN_SNAPSHOT_USED=1|0`，没有这一行即「未知」，不给此字段。
 
     # ============================================================ orb link（C2）
@@ -16598,7 +16598,7 @@ components:
     LinkStreamFs:
       type: object
       description: |
-        由 orynd 打开（M3）；流头之后是 HTTP/1.1，一条流一个请求（控制面 `Connection: close`），orbd 以本机 API 的
+        由 orynd 打开；流头之后是 HTTP/1.1，一条流一个请求（控制面 `Connection: close`），orbd 以本机 API 的
         `http.Server` 服务（路由见 docs/protocol.md「orbd 本机 API」）。只有 hello `features` 含相应特性的 orbd 才接受。
       required: [t]
       properties:
@@ -16606,7 +16606,7 @@ components:
     LinkStreamPortal:
       type: object
       description: |
-        由 orynd 打开（M4），每个代理连接一条。orbd 先回一行 `LinkPortalReply` + `\n`；`ok=true` 之后流上是与
+        由 orynd 打开，每个代理连接一条。orbd 先回一行 `LinkPortalReply` + `\n`；`ok=true` 之后流上是与
         `127.0.0.1:<port>`（被拒绝时回退 `[::1]:<port>`）之间的原始字节。只有 hello `features` 含 `portal` 的 orbd 才接受。
       required: [t, port]
       properties:
@@ -16625,7 +16625,7 @@ components:
     LinkStreamDesk:
       type: object
       description: |
-        由 orynd 打开（M8），每个桌面观看者一条。orbd 先回一行 `LinkDeskReply` + `\n`；`ok=true` 之后流上是与
+        由 orynd 打开，每个桌面观看者一条。orbd 先回一行 `LinkDeskReply` + `\n`；`ok=true` 之后流上是与
         Xvnc（unix socket `$HOME/.oryn/vnc.sock`）之间的原始 RFB 字节。只有 hello `features` 含 `desktop` 的 orbd 才接受。
       required: [t]
       properties:
@@ -16642,14 +16642,14 @@ components:
         message: { type: string }
     LinkStreamSsh:
       type: object
-      description: orbd→orynd（M18）：orb 内到 SSH 网关的一条 TCP 连接，其后是裸 SSH 字节流；runner 与协调宿主不可用
+      description: orbd→orynd：orb 内到 SSH 网关的一条 TCP 连接，其后是裸 SSH 字节流；runner 与协调宿主不可用
       required: [t]
       properties:
         t: { type: string, enum: [ssh] }
     LinkStreamSandbox:
       type: object
       description: |
-        orbd→orynd（M30）：owner orb 上一次沙箱调用。流头之后 orbd 写一行请求 `{"op","params"}`（≤ 1 MiB），
+        orbd→orynd：owner orb 上一次沙箱调用。流头之后 orbd 写一行请求 `{"op","params"}`（≤ 1 MiB），
         orynd 回零或多行 `{"s":"o"|"e","d"}`（只有 `exec`），最后恰好一行 `{"result":…}` 或 `{"error":{"code","message"}}` 后关流。
         orbd 提前关流 = 放弃（`create` 除外）。沙箱自身、runner 与协调宿主不可用。
       required: [t, threadId]
@@ -16662,7 +16662,7 @@ components:
     LinkStreamLibrary:
       type: object
       description: |
-        M13 全局助手文件库的字节流，两种用法：
+        全局助手文件库的字节流，两种用法：
         同步（orynd 打开，发往协调宿主）：`library.sync` 回报缺失的文件后，控制面为每个缺失文件开一条，`path` 为该次清单里的沙箱路径，
         流头之后是 `size` 字节原始内容；协调宿主校验字节数与 `sha256`、原子落盘后回一行 `LinkLibraryReply` + `\n` 并关闭。
         路径不在最近一次 `library.sync` 清单里的流一律拒绝。只有 hello `features` 含 `library` 的协调宿主才接受。
@@ -16703,29 +16703,29 @@ components:
         `entries.reset` / `entries.reset_done`（orbd→orynd 通知）、`agent.status`、`agent.gap`、`setup.log`、`metrics.sample`（orbd→orynd 通知）、
         `setup.run`、`resume.run`、`agent.start`、`agent.stop`、`blob.fetch`、`fs.copyTree`、`fs.move`、`shutdown`（orynd→orbd 请求）；
         `setup.result`（orbd→orynd 通知）、`project.scripts.get` / `project.scripts.set`（orbd→orynd 请求，只作用于本 orb 所属项目）；
-        `terminal.gap`（orbd→orynd 通知，M3）；
-        `services.state`（orbd→orynd 通知，M4，受管服务全量快照）、`portal.configure`（orynd→orbd 请求，M4）。
-        `desktop.state`（orbd→orynd 通知，M8，桌面全量状态）、`profile.mode`（orynd→orbd 请求，M8，改变本地 Profile 的使用方式）。
+        `terminal.gap`（orbd→orynd 通知）；
+        `services.state`（orbd→orynd 通知，受管服务全量快照）、`portal.configure`（orynd→orbd 请求）。
+        `desktop.state`（orbd→orynd 通知，桌面全量状态）、`profile.mode`（orynd→orbd 请求，改变本地 Profile 的使用方式）。
         `thread.create`、`thread.send`、`thread.get`、`schedule.get`、`schedule.put`、`schedule.delete`、`schedule.enable`
-        （orbd→orynd 请求，M9，orb 内 agent 间协作与自我定时；只有 `features` 含 `threads` 的 orbd 发起，协调宿主不接受）；
-        `snapshot.prepare`（orynd→orbd 请求，M11a，无参数，结果 `LinkCtlSnapshotPrepareResult`；项目快照提交前调用：停掉 orb 内运行中的 Docker 容器）；
-        `worktree.add`、`worktree.remove`（orynd→orbd 请求，M11b，只有 runner 形态的 orbd 接受；其它 orbd 回 `not_supported`）；
-        `omphome.apply`（orynd→orbd 请求，M13，参数 `LinkCtlOmpHomeApplyParams`，结果 `LinkCtlOkResult`；只在 hello 含 `omphome-apply` 时发送）；
-        `library.sync`（orynd→协调宿主请求，M13，参数 `LinkCtlLibrarySyncParams`，结果 `LinkCtlLibrarySyncResult`；只在 hello 含 `library` 时发送）、
-        `library.fetch`（orynd→orbd 请求，M13，参数 `LinkCtlLibraryFetchParams`，结果 `LinkCtlLibraryFetchResult`，字节经 orbd 另开的 `library` 流回传）、
-        `library.put`（orbd→orynd 请求，M13，由 orb 内 `oryn library put` 经 `orbd.sock` 转来，参数 `LinkCtlLibraryPutParams`，结果 `AssistantFile`）；
-        `artifact.call`（orbd→orynd 请求，M14，由 orb / Runner 内 agent 的 artifact 工具转来，参数 `LinkCtlArtifactCallParams`，结果 `LinkCtlArtifactCallResult`）；
-        `github.call`（orbd→orynd 请求，M15，由 orb 内 agent 的 GitHub 工具转来，参数 `LinkCtlGithubCallParams`，结果 `LinkCtlGithubCallResult`）、
-        `github.prepare.report`（orbd→orynd 请求，M15，`github_prepare` 通过后上报，参数 `LinkCtlGithubPrepareReportParams`，结果 `LinkCtlOkResult`）；
+        （orbd→orynd 请求，orb 内 agent 间协作与自我定时；只有 `features` 含 `threads` 的 orbd 发起，协调宿主不接受）；
+        `snapshot.prepare`（orynd→orbd 请求，无参数，结果 `LinkCtlSnapshotPrepareResult`；项目快照提交前调用：停掉 orb 内运行中的 Docker 容器）；
+        `worktree.add`、`worktree.remove`（orynd→orbd 请求，只有 runner 形态的 orbd 接受；其它 orbd 回 `not_supported`）；
+        `omphome.apply`（orynd→orbd 请求，参数 `LinkCtlOmpHomeApplyParams`，结果 `LinkCtlOkResult`；只在 hello 含 `omphome-apply` 时发送）；
+        `library.sync`（orynd→协调宿主请求，参数 `LinkCtlLibrarySyncParams`，结果 `LinkCtlLibrarySyncResult`；只在 hello 含 `library` 时发送）、
+        `library.fetch`（orynd→orbd 请求，参数 `LinkCtlLibraryFetchParams`，结果 `LinkCtlLibraryFetchResult`，字节经 orbd 另开的 `library` 流回传）、
+        `library.put`（orbd→orynd 请求，由 orb 内 `oryn library put` 经 `orbd.sock` 转来，参数 `LinkCtlLibraryPutParams`，结果 `AssistantFile`）；
+        `artifact.call`（orbd→orynd 请求，由 orb / Runner 内 agent 的 artifact 工具转来，参数 `LinkCtlArtifactCallParams`，结果 `LinkCtlArtifactCallResult`）；
+        `github.call`（orbd→orynd 请求，由 orb 内 agent 的 GitHub 工具转来，参数 `LinkCtlGithubCallParams`，结果 `LinkCtlGithubCallResult`）、
+        `github.prepare.report`（orbd→orynd 请求，`github_prepare` 通过后上报，参数 `LinkCtlGithubPrepareReportParams`，结果 `LinkCtlOkResult`）；
         runner 的 link 拒绝这两个方法。
-        `ssh.call`（orbd→orynd 请求，M18，由 orb 内 agent 的 `ssh_exec_many` 工具转来，参数 `LinkCtlSshCallParams`，结果 `LinkCtlSshCallResult`；runner 的 link 拒绝）。
-        `box.call`（orbd→orynd 请求，M23，由 orb 内 `oryn boxes …` 经 `orbd.sock` 转来，参数 `LinkCtlBoxCallParams`，结果 `LinkCtlBoxCallResult`；runner 的 link 拒绝）。
-        `follow.add`（orbd→orynd 请求，M26，由 orb 内 `oryn follow add` 经 `orbd.sock` 转来，参数 `LinkCtlFollowAddParams`，结果 `LinkCtlFollowAddResult`；
+        `ssh.call`（orbd→orynd 请求，由 orb 内 agent 的 `ssh_exec_many` 工具转来，参数 `LinkCtlSshCallParams`，结果 `LinkCtlSshCallResult`；runner 的 link 拒绝）。
+        `box.call`（orbd→orynd 请求，由 orb 内 `oryn boxes …` 经 `orbd.sock` 转来，参数 `LinkCtlBoxCallParams`，结果 `LinkCtlBoxCallResult`；runner 的 link 拒绝）。
+        `follow.add`（orbd→orynd 请求，由 orb 内 `oryn follow add` 经 `orbd.sock` 转来，参数 `LinkCtlFollowAddParams`，结果 `LinkCtlFollowAddResult`；
         控制面核对 `quote` 逐字出现在该线程某条主人消息里，runner 的 link 拒绝）。
-        `computer.start`、`computer.call`、`computer.cancel`、`computer.stop`（orynd→orbd 请求，M19，助手的电脑里的工具执行器：参数分别为
+        `computer.start`、`computer.call`、`computer.cancel`、`computer.stop`（orynd→orbd 请求，助手的电脑里的工具执行器：参数分别为
         `LinkCtlComputerStartParams` / `LinkCtlComputerCallParams` / `LinkCtlComputerCancelParams` / 无参数，结果分别为
         `LinkCtlComputerStartResult` / `LinkCtlComputerCallResult` / `LinkCtlOkResult` / `LinkCtlOkResult`；只在 hello 含 `computer` 时发送，
-        runner 与协调宿主回 `not_supported`）、`computer.update`（orbd→orynd 通知，M19，参数 `LinkCtlComputerUpdateParams`，在途工具的流式输出）。
+        runner 与协调宿主回 `not_supported`）、`computer.update`（orbd→orynd 通知，参数 `LinkCtlComputerUpdateParams`，在途工具的流式输出）。
       enum:
         - hello
         - entries.cursors
@@ -16860,8 +16860,8 @@ components:
           type: string
           description: |
             `unknown_method`、`invalid_params`、`not_found`、`failed`、`timeout`、`cursor_mismatch` 等；`busy` = 对端同时在途的请求已达上限（每个 ctl 端点 32 个），本请求未执行，可稍后重试。
-            M9 orb 内方法另有：`forbidden`（非亲属线程、不属于本 orb 的调用方）、`rate_limited`、`invalid_schedule`、`thread_archived`、`schedule_name_taken`。
-            M11b runner 形态的 orbd 另有：`not_supported`（runner 不处理的方法：`setup.run`、`resume.run`、`project.scripts.*`、`snapshot.prepare`、`shutdown`；
+            orb 内方法另有：`forbidden`（非亲属线程、不属于本 orb 的调用方）、`rate_limited`、`invalid_schedule`、`thread_archived`、`schedule_name_taken`。
+            runner 形态的 orbd 另有：`not_supported`（runner 不处理的方法：`setup.run`、`resume.run`、`project.scripts.*`、`snapshot.prepare`、`shutdown`；
             以及普通 orbd 收到 `worktree.*`）、`dir_not_served`（`agent.start` 的 `cwd` 或 `worktree.add` 的 `repo` 不在声明的目录内）、
             `worktree_dirty`（`worktree.remove` 时有未提交改动，`message` 为 git 的 stderr）。
         message: { type: string }
@@ -16895,31 +16895,31 @@ components:
         runner:
           allOf:
             - $ref: '#/components/schemas/LinkRunnerInfo'
-          description: 只由 runner 形态的 orbd 上报（M11b）
+          description: 只由 runner 形态的 orbd 上报
         features:
           type: array
           description: |
-            orbd 支持的可选能力（M3 起）：`fs`（`fs` 流上的文件接口）、`git`（`/git/*`）、`attachments`（`/attachments/*`）；
-            M4 起：`services`（`services.state` 通知与 `/services/*`）、`portal`（`portal` 流与 `portal.configure`）；M5 起：`sync`（`/sync/*`）；
-            M8 起：`desktop`（`desk` 流、`desktop.state` 通知、`profile.mode` 请求与 `/desktop/*`）。
-            M9 起：`threads`（orb 内线程与定时方法 `thread.*` / `schedule.*`，普通 orbd 上报）；
+            orbd 支持的可选能力（起）：`fs`（`fs` 流上的文件接口）、`git`（`/git/*`）、`attachments`（`/attachments/*`）；
+            起：`services`（`services.state` 通知与 `/services/*`）、`portal`（`portal` 流与 `portal.configure`）；起：`sync`（`/sync/*`）；
+            起：`desktop`（`desk` 流、`desktop.state` 通知、`profile.mode` 请求与 `/desktop/*`）。
+            起：`threads`（orb 内线程与定时方法 `thread.*` / `schedule.*`，普通 orbd 上报）；
             `coordinator`（认识 `agent.start` 的 `profile = coordinator`，**只由** `orynd coordinator-host` 上报，且此时特性表恰为 `["coordinator", "omphome-apply", "library"]`）。
-            M11a 起：`repo-update`（认识 `setup.run` 的 `repo.update`）、`docker`（orb 内 dockerd 由 orbd 监督，认识 `snapshot.prepare` 的停容器语义）、
+            起：`repo-update`（认识 `setup.run` 的 `repo.update`）、`docker`（orb 内 dockerd 由 orbd 监督，认识 `snapshot.prepare` 的停容器语义）、
             `setup-defer-resume`（认识 `setup.run` 的 `deferResume`，结果带 `setupChanged`）。
-            M11b 起：`terminal`（终端面板可用；runner 只在带 `--terminal` 时上报，未上报时控制面不发 `terminal_configure`）、
+            起：`terminal`（终端面板可用；runner 只在带 `--terminal` 时上报，未上报时控制面不发 `terminal_configure`）、
             `metrics`（上报 `metrics.sample`）。runner 形态上报 `fs`、`attachments`、`metrics`，`git` 在 PATH 里时加 `git`。
-            M13 起：`omphome-apply`（认识 `omphome.apply`；普通 orbd 与协调宿主上报，runner 不上报）、
+            起：`omphome-apply`（认识 `omphome.apply`；普通 orbd 与协调宿主上报，runner 不上报）、
             `library`（认识 `library.sync`、`library.fetch` 与同步用的 `library` 流；只由协调宿主上报，此时特性表恰为 `["coordinator", "omphome-apply", "library"]`）。
-            M16 起：`memory`（认识 `agent.start` 的 `memory`，并为记忆开出站通道 `/memory/`；普通 orbd 与 runner 上报，协调宿主不上报）。
-            M18 起：`ssh`（orbd 监听本机 SSH 网关端口并认识 `setup.run` / `omphome.apply` 的 `ssh`；runner 与协调宿主不上报）。
-            M19 起：`computer`（认识 `computer.*`：惰性拉起不调模型的 omp 当工具执行器；只由普通 orbd 上报）。
-            M25 起：`desktop-apps`（`desktop.state` 带 `apps` / `windows`，本机路由 `/desktop/apps/*` 与 `/desktop/windows/*`；只在有 `desktop` 时上报）。
-            M30 起：`fs-tar`（本机路由 `GET/PUT /fs/tar`，普通 orbd 与沙箱上报）、`sandbox`（精简模式 orbd，此时特性表恰为 `["fs", "fs-tar", "metrics", "sandbox"]`，监督着 dockerd 时再加 `docker`）。
+            起：`memory`（认识 `agent.start` 的 `memory`，并为记忆开出站通道 `/memory/`；普通 orbd 与 runner 上报，协调宿主不上报）。
+            起：`ssh`（orbd 监听本机 SSH 网关端口并认识 `setup.run` / `omphome.apply` 的 `ssh`；runner 与协调宿主不上报）。
+            起：`computer`（认识 `computer.*`：惰性拉起不调模型的 omp 当工具执行器；只由普通 orbd 上报）。
+            起：`desktop-apps`（`desktop.state` 带 `apps` / `windows`，本机路由 `/desktop/apps/*` 与 `/desktop/windows/*`；只在有 `desktop` 时上报）。
+            起：`fs-tar`（本机路由 `GET/PUT /fs/tar`，普通 orbd 与沙箱上报）、`sandbox`（精简模式 orbd，此时特性表恰为 `["fs", "fs-tar", "metrics", "sandbox"]`，监督着 dockerd 时再加 `docker`）。
             缺省 = 旧版 orbd，控制面对其文件 / 改动 / 附件 / 服务 / portal / sync / 桌面请求回 409 `orbd_outdated`。
           items: { type: string }
     LinkRunnerInfo:
       type: object
-      description: runner 形态 orbd 的 hello 附加信息（M11b）
+      description: runner 形态 orbd 的 hello 附加信息
       required: [hostname, dirs]
       properties:
         hostname: { type: string }
@@ -17009,7 +17009,7 @@ components:
     LinkCtlTerminalGapParams:
       type: object
       description: |
-        orbd 帧缓冲 ≥8MiB 时丢弃了该线程的 `terminal_output` 帧，缓冲回落到 ≤1MiB 后发送一次（M3）。
+        orbd 帧缓冲 ≥8MiB 时丢弃了该线程的 `terminal_output` 帧，缓冲回落到 ≤1MiB 后发送一次。
         控制面向该线程开启 `term.watch` 的连接发 `term.lagged`。
       required: [threadId]
       properties:
@@ -17041,16 +17041,16 @@ components:
         hasProjectScript: { type: boolean }
         prepared:
           type: boolean
-          description: 本次开始时完成标记已存在（M11a）
+          description: 本次开始时完成标记已存在
         baseCommit:
           type: string
-          description: 结束时检出的提交（40 位十六进制，M11a）；无仓库省略
+          description: 结束时检出的提交（40 位十六进制）；无仓库省略
         repoUpdated:
           type: boolean
-          description: '`repo.update` 让检出前进到了新提交（M11a）'
+          description: '`repo.update` 让检出前进到了新提交'
         setupChanged:
           type: boolean
-          description: '本次 `repo.update` 前后 `.oryn/setup`、`.agents/setup`、`.oryn/services.yaml` 任一有变化，或基线不是快进（走了 reset），即为 true（M11a 审查修复）'
+          description: '本次 `repo.update` 前后 `.oryn/setup`、`.agents/setup`、`.oryn/services.yaml` 任一有变化，或基线不是快进（走了 reset），即为 true（审查修复）'
     LinkCtlProjectScriptsGetParams:
       type: object
       description: 无参数
@@ -17081,11 +17081,11 @@ components:
         update:
           type: boolean
           description: |
-            M11a：工作目录已有检出时 `git fetch` 基线并移动到最新；HEAD 变化则删掉完成标记、重跑 setup 脚本。fetch 失败只记日志、沿用现有检出。
+            工作目录已有检出时 `git fetch` 基线并移动到最新；HEAD 变化则删掉完成标记、重跑 setup 脚本。fetch 失败只记日志、沿用现有检出。
             只用于 agent 从未运行过的 orb（来自项目快照的新 orb，或刚被认领的预热池 orb）；只在 hello 的 `features` 含 `repo-update` 时置位。
         previousUrls:
           type: array
-          description: 仓库改名 / 转移前的地址（M14）；工作目录的 origin 等于其中之一时改到 `url`
+          description: 仓库改名 / 转移前的地址；工作目录的 origin 等于其中之一时改到 `url`
           items: { type: string }
     LinkCtlSetupScripts:
       type: object
@@ -17106,7 +17106,7 @@ components:
     LinkCtlOmpHomeApplyParams:
       type: object
       description: |
-        M13：只写 omp 文本配置，与 `setup.run` 的第 1 步相同：`ompHome` 写进 `$HOME/.omp/agent/` 并清理上次下发、这次已不在清单里的文件；
+        只写 omp 文本配置，与 `setup.run` 的第 1 步相同：`ompHome` 写进 `$HOME/.omp/agent/` 并清理上次下发、这次已不在清单里的文件；
         带 `projectConfig` 时把项目层镜像到 `$HOME/.oryn/project-config/.omp/`，缺省时不动项目层。不碰 git、不跑脚本。
         与 `setup.run` / `resume.run` 写配置的那一步按到达顺序、按层生效：先到达的 setup 若在本请求之后才走到写配置，
         就跳过本请求已写过的那一层，不会用旧内容覆盖新内容。
@@ -17121,10 +17121,10 @@ components:
         ssh:
           allOf:
             - $ref: '#/components/schemas/LinkCtlSshConfig'
-          description: M18：缺省 = 不动 orb 内的 SSH 配置
+          description: 缺省 = 不动 orb 内的 SSH 配置
     LinkCtlProjectConfig:
       type: object
-      description: 项目级 omp 配置（M12.2）。出现即表示 orb 属于某个项目：orbd 把 `$HOME/.oryn/project-config/.omp/` 镜像成 `files`，目录里不在其中的文件一律删除
+      description: 项目级 omp 配置。出现即表示 orb 属于某个项目：orbd 把 `$HOME/.oryn/project-config/.omp/` 镜像成 `files`，目录里不在其中的文件一律删除
       required: [files]
       properties:
         files:
@@ -17132,13 +17132,13 @@ components:
           items: { $ref: '#/components/schemas/LinkCtlOmpHomeFile' }
     LinkCtlSetupGh:
       type: object
-      description: orb 内 `gh` 的登录信息（M14）；令牌由出站代理注入，orb 内只有占位值
+      description: orb 内 `gh` 的登录信息；令牌由出站代理注入，orb 内只有占位值
       required: [login]
       properties:
         login: { type: string }
         uploads:
           type: boolean
-          description: M15：orbd 的 gh 代理同时把 `uploads.github.com` 转到出站代理
+          description: orbd 的 gh 代理同时把 `uploads.github.com` 转到出站代理
     LinkCtlSetupRunParams:
       type: object
       required: [workdir, gitHosts, scripts, ompHome, env]
@@ -17169,16 +17169,16 @@ components:
         deferResume:
           type: boolean
           description: |
-            M11a 审查修复：true = 只跑 setup（clone / `repo.update` / setup 脚本），**不**跑 resume 脚本、**不**启动受管服务；
+            审查修复：true = 只跑 setup（clone / `repo.update` / setup 脚本），**不**跑 resume 脚本、**不**启动受管服务；
             控制面随后单独调 `resume.run`。只在 hello 的 `features` 含 `setup-defer-resume` 时置位；`resume.run` 忽略此字段。
         ssh:
           allOf:
             - $ref: '#/components/schemas/LinkCtlSshConfig'
-          description: M18：缺省 = 不动 orb 内的 SSH 配置
+          description: 缺省 = 不动 orb 内的 SSH 配置
     LinkCtlSshConfig:
       type: object
       description: |
-        M18：orb 内的 SSH 主机。orbd 把每台主机写成 `~/.omp/agent/ssh.json` 里的 `<名>@127.0.0.1:<网关端口>`，
+        orb 内的 SSH 主机。orbd 把每台主机写成 `~/.omp/agent/ssh.json` 里的 `<名>@127.0.0.1:<网关端口>`，
         并重写 `~/.oryn/ssh/config`、`~/.ssh/config` 的 `Include` 行与 `~/.ssh/known_hosts` 的网关条目。
       required: [hostKey, hosts]
       properties:
@@ -17199,7 +17199,7 @@ components:
         compat: { type: boolean }
     LinkCtlFollowAddParams:
       type: object
-      description: M26（orbd→orynd）：工作线程里主人要求跟进某件事时登记一个公网跟进话题（`origin = thread`）。
+      description: （orbd→orynd）：工作线程里主人要求跟进某件事时登记一个公网跟进话题（`origin = thread`）。
       required: [threadId, title, question, quote]
       properties:
         threadId: { $ref: '#/components/schemas/ThreadId' }
@@ -17219,7 +17219,7 @@ components:
         topicId: { type: string }
     LinkCtlBoxCallParams:
       type: object
-      description: M23（orbd→orynd）：orb 内 `oryn boxes …` 的调用。控制面校验调用方线程属于本 orb、`kind = work`、未归档，且 orb 不是全自动入口建立的。
+      description: （orbd→orynd）：orb 内 `oryn boxes …` 的调用。控制面校验调用方线程属于本 orb、`kind = work`、未归档，且 orb 不是全自动入口建立的。
       required: [threadId, op, params]
       properties:
         threadId: { $ref: '#/components/schemas/ThreadId' }
@@ -17239,7 +17239,7 @@ components:
           additionalProperties: true
     LinkCtlSshCallParams:
       type: object
-      description: M18（orbd→orynd）：orb 内 agent 的 SSH 工具调用。控制面校验调用方线程属于本 orb、`kind = work`、未归档。
+      description: （orbd→orynd）：orb 内 agent 的 SSH 工具调用。控制面校验调用方线程属于本 orb、`kind = work`、未归档。
       required: [threadId, tool, params]
       properties:
         threadId: { $ref: '#/components/schemas/ThreadId' }
@@ -17261,7 +17261,7 @@ components:
           additionalProperties: true
     LinkCtlGithubCallParams:
       type: object
-      description: M15（orbd→orynd）：orb 内 agent 的 GitHub 工具调用。控制面校验调用方线程属于本 orb、`kind = work`、未归档。
+      description: （orbd→orynd）：orb 内 agent 的 GitHub 工具调用。控制面校验调用方线程属于本 orb、`kind = work`、未归档。
       required: [threadId, tool, params]
       properties:
         threadId: { $ref: '#/components/schemas/ThreadId' }
@@ -17283,7 +17283,7 @@ components:
           additionalProperties: true
     LinkCtlGithubPrepareReportParams:
       type: object
-      description: M15（orbd→orynd）：`github_prepare` 通过后上报，控制面据此在出站代理放行该 SHA
+      description: （orbd→orynd）：`github_prepare` 通过后上报，控制面据此在出站代理放行该 SHA
       required: [threadId, sha, level, skipped, gatesHash]
       properties:
         threadId: { $ref: '#/components/schemas/ThreadId' }
@@ -17316,16 +17316,16 @@ components:
         durationMs: { type: integer, format: int64 }
         prepared:
           type: boolean
-          description: 本次开始时完成标记已存在（M11a）
+          description: 本次开始时完成标记已存在
         baseCommit:
           type: string
-          description: 结束时检出的提交（40 位十六进制，M11a）；无仓库省略
+          description: 结束时检出的提交（40 位十六进制）；无仓库省略
         repoUpdated:
           type: boolean
-          description: '`repo.update` 让检出前进到了新提交（M11a）'
+          description: '`repo.update` 让检出前进到了新提交'
         setupChanged:
           type: boolean
-          description: '本次 `repo.update` 前后 `.oryn/setup`、`.agents/setup`、`.oryn/services.yaml` 任一有变化，或基线不是快进（走了 reset），即为 true（M11a 审查修复）；为 true 时控制面不以来源快照为父发布新快照'
+          description: '本次 `repo.update` 前后 `.oryn/setup`、`.agents/setup`、`.oryn/services.yaml` 任一有变化，或基线不是快进（走了 reset），即为 true（审查修复）；为 true 时控制面不以来源快照为父发布新快照'
     LinkCtlResumeRunParams:
       description: 同 `setup.run`，但不 clone、不跑 setup
       allOf:
@@ -17334,17 +17334,17 @@ components:
       $ref: '#/components/schemas/LinkCtlSetupRunResult'
     LinkCtlSnapshotPrepareParams:
       type: object
-      description: '`snapshot.prepare` 无参数（M11a）'
+      description: '`snapshot.prepare` 无参数'
     LinkCtlSnapshotPrepareResult:
       type: object
-      description: '`snapshot.prepare` 的结果（M11a）：orbd 监督 dockerd 时已 `docker stop` 全部运行中的内层容器；未监督直接 `ok=true`'
+      description: '`snapshot.prepare` 的结果：orbd 监督 dockerd 时已 `docker stop` 全部运行中的内层容器；未监督直接 `ok=true`'
       required: [ok]
       properties:
         ok: { type: boolean }
     LinkCtlWorktreeAddParams:
       type: object
       description: |
-        `worktree.add`（orynd→orbd 请求，M11b，只有 runner 形态接受）：在 `repo` 旁新建 worktree 与同名分支；结果 `LinkCtlWorktreeAddResult`。
+        `worktree.add`（orynd→orbd 请求，只有 runner 形态接受）：在 `repo` 旁新建 worktree 与同名分支；结果 `LinkCtlWorktreeAddResult`。
         `repo` 须在声明的目录内（否则 `dir_not_served`）且含 `.git`；`name` 须匹配 `^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$`（否则 `invalid_params`）。
         目录 = `<repo 的父目录>/<repo 名>-<name>`，目录或分支已存在则依次试 `-2`、`-3`…；git 失败 → `failed`（`message` 为 git 的 stderr）。
       required: [repo, name]
@@ -17364,7 +17364,7 @@ components:
     LinkCtlWorktreeRemoveParams:
       type: object
       description: |
-        `worktree.remove`（orynd→orbd 请求，M11b，只有 runner 形态接受）：`dir` 须是本 orbd 建过的 worktree（否则 `not_found`）；
+        `worktree.remove`（orynd→orbd 请求，只有 runner 形态接受）：`dir` 须是本 orbd 建过的 worktree（否则 `not_found`）；
         `git worktree remove`（不带 `--force`，有未提交改动 → `worktree_dirty`），随后 `git branch -d`（失败则 `branchKept: true`）。
       required: [dir]
       properties:
@@ -17385,7 +17385,7 @@ components:
         sessionDir: { type: string }
         cwd:
           type: string
-          description: runner 形态（M11b）必填，且须在声明的目录或已登记的 worktree 之内（否则 `dir_not_served`）；`sessionDir` 须在 `$HOME/.oryn/threads/` 之下
+          description: runner 形态必填，且须在声明的目录或已登记的 worktree 之内（否则 `dir_not_served`）；`sessionDir` 须在 `$HOME/.oryn/threads/` 之下
         env:
           type: object
           additionalProperties: { type: string }
@@ -17396,33 +17396,33 @@ components:
         profile:
           type: string
           description: |
-            M9：`coordinator` = 协调档（无代码工具、独立 HOME 与设置覆盖层、从零构造的环境，`cwd` 由 orbd 决定）。
+            `coordinator` = 协调档（无代码工具、独立 HOME 与设置覆盖层、从零构造的环境，`cwd` 由 orbd 决定）。
             **只有协调宿主接受**：普通 orbd 收到非空 `profile` → `invalid_params`；协调宿主收到其它值或省略 → `invalid_params`。
           enum: [coordinator]
           x-enum-varnames: [AgentProfileCoordinator]
         systemPrompt:
           type: string
-          description: M9 协调档的系统提示词（以字面量传给 omp `--system-prompt`，必须含换行，否则 `invalid_params`）；只有协调宿主接受
+          description: 协调档的系统提示词（以字面量传给 omp `--system-prompt`，必须含换行，否则 `invalid_params`）；只有协调宿主接受
         web:
           type: boolean
           description: |
-            M19：协调档是否打开第一层（内置 `web_search` 与 `generate_image`、`read` 读 URL、环境带 `PI_PROXY` 走 orynd 的正向代理）。
-            只给全局助手的对话；Space 协调者省略（= false），工具与环境同 M19 之前（D10）。只有协调宿主接受。
+            协调档是否打开第一层（内置 `web_search` 与 `generate_image`、`read` 读 URL、环境带 `PI_PROXY` 走 orynd 的正向代理）。
+            只给全局助手的对话；Space 协调者省略（= false），工具与环境同 之前（D10）。只有协调宿主接受。
         mcpToken:
           type: string
           description: |
-            M19：协调宿主 /mcp/ 路由的凭据，`web` 为真或 `variant` 为 `research_private` 时生效：orbd 以环境变量 `ORYN_MCP_TOKEN`
+            协调宿主 /mcp/ 路由的凭据，`web` 为真或 `variant` 为 `research_private` 时生效：orbd 以环境变量 `ORYN_MCP_TOKEN`
             交给该 agent，mcp.json 的 `X-Oryn-MCP-Token` 请求头引用它，出站代理逐个请求核对（D10：Space 协调者没有它，直接请求
             /mcp/ 一律 403）。只有协调宿主接受。
         variant:
           type: string
           description: |
-            M26：协调档的启动变体。`research_web` 公网研究员（`web_search` 与只读公网网址的 `read`）；`research_private` 私有研究员
+            协调档的启动变体。`research_web` 公网研究员（`web_search` 与只读公网网址的 `read`）；`research_private` 私有研究员
             （没有内置工具、没有 `PI_PROXY`）；`main_restricted` 受限的主线（只有 `read`）。与 `web` 互斥。只有协调宿主接受；省略 = 改动前的行为。
           enum: [research_web, research_private, main_restricted]
           x-enum-varnames: [AgentVariantResearchWeb, AgentVariantResearchPrivate, AgentVariantMainRestricted]
         memory: { $ref: '#/components/schemas/LinkCtlAgentMemory' }
-        # M21：projectId / projectConfig 只对 runner 线程给出（同时出现）：runner 一台机器可同时跑多个项目的线程，项目层按线程
+        # projectId / projectConfig 只对 runner 线程给出（同时出现）：runner 一台机器可同时跑多个项目的线程，项目层按线程
         # 随 agent.start 交付（原样不经变换，与 orb 相同；线程不属于项目或项目没有项目层时省略）。orb 线程不带（orb 的项目层经
         # setup.run / omphome.apply 下发）。
         projectId: { $ref: '#/components/schemas/ProjectId' }
@@ -17441,7 +17441,7 @@ components:
         viewTools:
           type: boolean
           description: |
-            M33：是否给工作线程主 agent 视图工具（render_ui / render_html）。为真时 orbd 设 `ORYN_VIEW_TOOLS` 指向受管的
+            是否给工作线程主 agent 视图工具（render_ui / render_html）。为真时 orbd 设 `ORYN_VIEW_TOOLS` 指向受管的
             view-tools.json；省略或为假时清掉该变量。只有普通工作线程接受（协调宿主不设）。
     LinkCtlAgentStartResult:
       type: object
@@ -17451,11 +17451,11 @@ components:
         variant:
           type: string
           description: |
-            M26：协调宿主报回在跑的 agent 实际使用的变体；幂等返回时是已有监督器的变体；没有变体时省略。
+            协调宿主报回在跑的 agent 实际使用的变体；幂等返回时是已有监督器的变体；没有变体时省略。
         sshPublicKey:
           type: string
           description: |
-            M21：只有 runner 且 SSH 网关端口在监听时给出——orbd 为该线程的监督器生成的 ed25519 公钥（OpenSSH authorized_keys
+            只有 runner 且 SSH 网关端口在监听时给出——orbd 为该线程的监督器生成的 ed25519 公钥（OpenSSH authorized_keys
             单行）。私钥只在 runner 本机（`$HOME/.oryn/threads/<线程>/ssh/id_ed25519`，agent 环境 `ORYN_SSH_KEY`），随监督器
             生灭：已有活动监督器时幂等返回同一把公钥。orynd 据此登记「公钥 → 线程」，SSH 网关对 runner 的 `ssh` 流按它认出线程。
     LinkCtlAgentStopParams:
@@ -17494,7 +17494,7 @@ components:
     LinkCtlLibrarySyncParams:
       type: object
       description: |
-        M13（orynd→协调宿主）：文件库在协调宿主沙箱里应有的全部文件。协调宿主删除 `~/library/shared/` 与 `~/library/threads/` 下
+        （orynd→协调宿主）：文件库在协调宿主沙箱里应有的全部文件。协调宿主删除 `~/library/shared/` 与 `~/library/threads/` 下
         不在清单里或内容不符的一切（含符号链接与空目录），确保 `~/library/out/` 存在，并回报还缺哪些文件；控制面随后为每个缺失文件开一条 `library` 流。
         清单里的路径必须是上述两种形态（`fileId` 为 `afl_…`，`name` 是单个路径段），否则整个请求 `invalid_params`。
       required: [files]
@@ -17513,7 +17513,7 @@ components:
     LinkCtlLibraryFetchParams:
       type: object
       description: |
-        M13（orynd→orbd）：取回一个文件的字节。orbd 校验通过后另开一条 `library` 流（流头 `id` 回带本请求的 `id`）发送原始字节，再应答。
+        （orynd→orbd）：取回一个文件的字节。orbd 校验通过后另开一条 `library` 流（流头 `id` 回带本请求的 `id`）发送原始字节，再应答。
         协调宿主只服务 `~/library/out/` 下的普通文件：`path` 可写成 `~/…`、绝对路径或相对 `~/library/out/` 的路径，含 `..` 段、解析符号链接后
         越出 `~/library/out/` 或不是普通文件一律 `invalid_params` / `not_found`。普通 orbd 只服务本 orb 正在经 `library.put` 存入的那个路径。
       required: [id, path]
@@ -17533,7 +17533,7 @@ components:
     LinkCtlLibraryPutParams:
       type: object
       description: |
-        M13（orbd→orynd，由 orb 内 `oryn library put <文件>` 经 `orbd.sock` 转来）：把 orb 内的一个文件存进全局助手文件库，
+        （orbd→orynd，由 orb 内 `oryn library put <文件>` 经 `orbd.sock` 转来）：把 orb 内的一个文件存进全局助手文件库，
         `scope = shared`、`source = orb`、`sourceThreadId` = 调用方线程；结果 `AssistantFile`。控制面先校验调用方
         （属于本 orb、`kind = work`、未归档，否则 `forbidden`），再对同一 orb 发 `library.fetch{path}` 取回字节。
       required: [threadId, path]
@@ -17551,7 +17551,7 @@ components:
     LinkCtlArtifactCallParams:
       type: object
       description: |
-        M14（orbd→orynd，由 orb / Runner 内 agent 的 artifact 工具经 `orbd.sock` / `runner.sock` 转来）：执行一个 artifact 操作。
+        （orbd→orynd，由 orb / Runner 内 agent 的 artifact 工具经 `orbd.sock` / `runner.sock` 转来）：执行一个 artifact 操作。
         控制面先校验调用方（属于本 orb、`kind = work`、未归档，否则 `forbidden`）；`params.files[*].source` 是 orb 内的绝对路径，
         控制面在本次请求里经 `library.fetch` 取回字节（orbd 转发期间把这些路径登记为可取回）。
       required: [threadId, op, params]
@@ -17569,7 +17569,7 @@ components:
           description: 操作参数（camelCase，与 agent 工具同形）
         turn:
           type: object
-          description: M29：调用所处的 agent 回合（orb 扩展每次调用都带）；写出的版本记 `turnId` 与标题（`title` 的首行）
+          description: 调用所处的 agent 回合（orb 扩展每次调用都带）；写出的版本记 `turnId` 与标题（`title` 的首行）
           required: [id, title]
           properties:
             id: { type: string }
@@ -17595,7 +17595,7 @@ components:
               description: base64
     LinkCtlComputerStartParams:
       type: object
-      description: M19（orynd→orbd）：确保工具执行器在跑，返回所列工具的定义（取不到的名字跳过）
+      description: （orynd→orbd）：确保工具执行器在跑，返回所列工具的定义（取不到的名字跳过）
       required: [names]
       properties:
         names:
@@ -17614,7 +17614,7 @@ components:
           description: 执行器 omp 的版本
     LinkCtlComputerCallParams:
       type: object
-      description: M19（orynd→orbd）：在工具执行器里直接执行一个内置工具；到时发取消并回错误 `timeout`
+      description: （orynd→orbd）：在工具执行器里直接执行一个内置工具；到时发取消并回错误 `timeout`
       required: [callId, tool, args, timeoutSec]
       properties:
         callId:
@@ -17643,7 +17643,7 @@ components:
         callId: { type: string }
     LinkCtlComputerUpdateParams:
       type: object
-      description: M19（orbd→orynd 通知）：在途工具的流式部分结果
+      description: （orbd→orynd 通知）：在途工具的流式部分结果
       required: [callId, partialResult]
       properties:
         callId: { type: string }
@@ -17696,8 +17696,8 @@ components:
     LinkCtlDesktopStateParams:
       type: object
       description: |
-        orbd→orynd 通知（M8）：桌面全量状态。发送时机：`displayReady`、`browser`、标记里的 `profileId` / `profileMode`、`dirty`、`control`、
-        `apps`（M25）任一变化立即发送；只有 `windows`（M25）变化时合并发送，至少间隔 500ms；以及 link 建立后（脏标记 + 单发送者，
+        orbd→orynd 通知：桌面全量状态。发送时机：`displayReady`、`browser`、标记里的 `profileId` / `profileMode`、`dirty`、`control`、
+        `apps`任一变化立即发送；只有 `windows`变化时合并发送，至少间隔 500ms；以及 link 建立后（脏标记 + 单发送者，
         断连时丢弃、重连必补发）。控制面写入 `orb_desktops` 镜像并经 WS `orb` 消息推送。
       required: [displayReady, browser, dirty]
       properties:
@@ -17728,17 +17728,17 @@ components:
         apps:
           type: array
           maxItems: 16
-          description: 桌面应用清单与运行状态（M25，按任务栏顺序）；旧 orbd 省略
+          description: 桌面应用清单与运行状态（按任务栏顺序）；旧 orbd 省略
           items: { $ref: '#/components/schemas/OrbDesktopApp' }
         windows:
           type: array
           maxItems: 32
-          description: 顶层窗口（M25，按 `_NET_CLIENT_LIST` 顺序）；旧 orbd 省略
+          description: 顶层窗口（按 `_NET_CLIENT_LIST` 顺序）；旧 orbd 省略
           items: { $ref: '#/components/schemas/OrbDesktopWindow' }
     LinkCtlProfileModeParams:
       type: object
       description: |
-        orynd→orbd 请求（M8；仅对 `features` 含 `desktop` 的 orbd；结果 `LinkCtlOkResult`，10s，失败只记日志）。
+        orynd→orbd 请求（仅对 `features` 含 `desktop` 的 orbd；结果 `LinkCtlOkResult`，10s，失败只记日志）。
         目前只在接管时发给原持有者：`{profileId, mode: readonly, reason: taken_over}`；不带接管方的任何信息（orb 内 agent 可读标记文件）。
         orbd 只在标记的 `profileId` 与之相同时生效：改写标记的使用方式、`dirty=false`，浏览器照常运行、标签页不动，
         此后 `/desktop/profile/export` 回 409 `profile_readonly`（跳过一切保存）；标记不符 → 错误 `profile_mismatch`。
@@ -17763,7 +17763,7 @@ components:
     LinkCtlThreadCreateParams:
       type: object
       description: |
-        orbd→orynd 请求（M9，`features` 含 `threads` 的 orbd；由 orb 内 `oryn thread new` 经 `orbd.sock` 转来）。
+        orbd→orynd 请求（`features` 含 `threads` 的 orbd；由 orb 内 `oryn thread new` 经 `orbd.sock` 转来）。
         在调用方线程的项目（与 Space）里新建一个子线程（`parentThreadId` = 调用方），新 orb；结果 `LinkCtlThreadInfo`。
         调用方须属于本 orb、`kind = work`、未归档，否则 `forbidden`；超出子线程数 / 深度 / 全库速率 → `rate_limited`。
       required: [threadId, prompt]
@@ -17798,7 +17798,7 @@ components:
     LinkCtlThreadSendParams:
       type: object
       description: |
-        orbd→orynd 请求（M9）：以自动化身份向 `target` 追加一条消息（正文前加来源头行）；结果 `LinkCtlOkResult`。
+        orbd→orynd 请求：以自动化身份向 `target` 追加一条消息（正文前加来源头行）；结果 `LinkCtlOkResult`。
         `target` 须是调用方的父线程或直接子线程且 `kind = work`，否则 `forbidden`。
       required: [threadId, target, message]
       properties:
@@ -17813,7 +17813,7 @@ components:
           description: 为真且目标正在工作时作为 steer 送达；否则排在当前回合之后
     LinkCtlThreadGetParams:
       type: object
-      description: orbd→orynd 请求（M9）：读取亲属线程的状态；结果 `LinkCtlThreadInfo`；亲属规则同 `thread.send`
+      description: orbd→orynd 请求：读取亲属线程的状态；结果 `LinkCtlThreadInfo`；亲属规则同 `thread.send`
       required: [threadId, target]
       properties:
         threadId:
@@ -17823,7 +17823,7 @@ components:
         target: { $ref: '#/components/schemas/ThreadId' }
     LinkCtlScheduleParams:
       type: object
-      description: '`schedule.get` / `schedule.delete` 的参数（M9）：只作用于调用方线程自己的线程内定时；结果分别为 `LinkCtlScheduleResult` / `LinkCtlOkResult`'
+      description: '`schedule.get` / `schedule.delete` 的参数：只作用于调用方线程自己的线程内定时；结果分别为 `LinkCtlScheduleResult` / `LinkCtlOkResult`'
       required: [threadId]
       properties:
         threadId:
@@ -17833,7 +17833,7 @@ components:
     LinkCtlSchedulePutParams:
       type: object
       description: |
-        `schedule.put`（M9）：设置调用方线程的线程内定时（`createdBy = agent`）；结果 `LinkCtlScheduleResult`。
+        `schedule.put`：设置调用方线程的线程内定时（`createdBy = agent`）；结果 `LinkCtlScheduleResult`。
         `input` 只接受线程内定时的字段：带 `mode = new_thread`、`threadId`（不等于调用方）或任一 `new_thread` 专属字段 → `invalid_schedule`。
       required: [threadId, input]
       properties:
@@ -17844,7 +17844,7 @@ components:
         input: { $ref: '#/components/schemas/ScheduleInput' }
     LinkCtlScheduleEnableParams:
       type: object
-      description: '`schedule.enable`（M9）：暂停 / 恢复调用方线程的线程内定时；结果 `LinkCtlScheduleResult`'
+      description: '`schedule.enable`：暂停 / 恢复调用方线程的线程内定时；结果 `LinkCtlScheduleResult`'
       required: [threadId, enabled]
       properties:
         threadId:
@@ -17858,7 +17858,7 @@ components:
       properties:
         schedule: { $ref: '#/components/schemas/Schedule' }
 
-    # ============================================================ browser-relay（M27）
+    # ============================================================ browser-relay
     BrowserRelayBindingSummary:
       type: object
       required: [threadId, sharedTabCount, pendingApprovals]
@@ -17905,14 +17905,14 @@ components:
         deviceId: { $ref: '#/components/schemas/DeviceId' }
     WsServerBrowserRelayState:
       type: object
-      description: 线程本机浏览器绑定与审批状态变更（M27）
+      description: 线程本机浏览器绑定与审批状态变更
       required: [type, state]
       properties:
         type: { type: string, enum: [browser_relay.state] }
         state: { $ref: '#/components/schemas/ThreadBrowserRelay' }
     WsServerBrowserRelayClients:
       type: object
-      description: 在线本机浏览器扩展客户端列表变更（M27）
+      description: 在线本机浏览器扩展客户端列表变更
       required: [type, clients]
       properties:
         type: { type: string, enum: [browser_relay.clients] }
@@ -17922,7 +17922,7 @@ components:
     LinkStreamBrowserRelay:
       type: object
       description: |
-        由 orynd 打开（M27），对应一个已绑定在线浏览器扩展的线程。
+        由 orynd 打开，对应一个已绑定在线浏览器扩展的线程。
         流头之后为换行分隔 JSON（NDJSON）：orynd→orbd 传扩展的 ExtToRelayMessage，
         orbd→orynd 传 orb 内 omp browser-relay 的 RelayToExtMessage。
       required: [t, threadId]

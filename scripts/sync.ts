@@ -1,8 +1,8 @@
 // 从 Oryn 仓库同步生成物：版本锁、OpenAPI 规格、命令行参考、配置参考。
 // 用法：bun run sync [--allow-dirty]
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { assertClean, git, orynRepo, run, siteRoot, writeLock } from './lib/oryn';
+import { assertClean, git, orynRepo, run, scrubMilestones, siteRoot, writeLock } from './lib/oryn';
 
 const allowDirty = process.argv.includes('--allow-dirty');
 assertClean(['cmd/oryn', 'internal/config', 'internal/pushgw', 'internal/opsconf', 'schema/openapi.yaml'], allowDirty);
@@ -12,8 +12,10 @@ const describe = git(['describe', '--tags', '--match', 'v[0-9]*', '--always']);
 writeLock({ commit, describe, syncedAt: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
 console.log(`Oryn ${describe}（${commit.slice(0, 12)}）`);
 
+// 站点用去掉里程碑标签的副本；Oryn 仓库里的规格保持原样
 mkdirSync(join(siteRoot, 'reference-data'), { recursive: true });
-copyFileSync(join(orynRepo, 'schema/openapi.yaml'), join(siteRoot, 'reference-data/openapi.yaml'));
+const spec = readFileSync(join(orynRepo, 'schema/openapi.yaml'), 'utf8');
+writeFileSync(join(siteRoot, 'reference-data/openapi.yaml'), scrubMilestones(spec));
 
 run(['bun', 'scripts/gen-cli.ts']);
 run(['go', 'run', './tools/gen-config', '-src', orynRepo, '-out', 'reference-data/config.json']);

@@ -59,3 +59,25 @@ export function run(cmd: string[], cwd = siteRoot, env?: Record<string, string>)
 		process.exit(r.exitCode ?? 1);
 	}
 }
+
+// 里程碑标签（M5、M11b、M9.6、M24 阶段 ③）。前后不能紧挨字母、数字或路径字符，避免误伤 `m5`、`/M2/` 之类。
+const MS = String.raw`(?<![A-Za-z0-9_/.\x60-])M\d+[ab]?(?:\.\d+)?(?:\s*阶段\s*[①-⑩\d]+)?(?![A-Za-z0-9_])`;
+export const milestonePattern = new RegExp(MS);
+
+/**
+ * 去掉工程规格里的里程碑标签，文档站不展示它们。按出现形态逐条处理，保留括号里的其余说明：
+ * 「（M5）」整段删；「（M24；…」「（M16：…」删标签与分隔符；「…，M27）」「…，M4，…」删标签；
+ * 「M30：…」「M3（…」「M16 记忆」删前缀标签；「为 M11b」删整个短语。
+ */
+export function scrubMilestones(text: string): string {
+	const list = String.raw`${MS}(?:\s*/\s*${MS})*`;
+	return text
+		.replace(new RegExp(String.raw`[（(]\s*${list}\s*[)）]`, 'g'), '')
+		.replace(new RegExp(String.raw`([（(])\s*${list}\s*[；;：:，,]\s*`, 'g'), '$1')
+		.replace(new RegExp(String.raw`\s*[，,；;]\s*${MS}\s*(?=[)）])`, 'g'), '')
+		.replace(new RegExp(String.raw`${list}\s*[：:]\s*`, 'g'), '')
+		.replace(new RegExp(String.raw`${list}\s*(?=[（(])`, 'g'), '')
+		.replace(new RegExp(String.raw`${MS}\s+(?=\S)`, 'g'), '')
+		.replace(new RegExp(String.raw`\s*[，,]\s*${MS}\s*(?=[，,])`, 'g'), '')
+		.replace(new RegExp(String.raw`\s*为\s*${MS}`, 'g'), '');
+}

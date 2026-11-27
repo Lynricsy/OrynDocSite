@@ -4,6 +4,7 @@ import { Glob } from 'bun';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parse } from 'yaml';
+import { milestonePattern } from './lib/oryn';
 
 const root = join(import.meta.dir, '..');
 const docsDir = join(root, 'src/content/docs');
@@ -53,13 +54,23 @@ function scanBareTags(file: string, body: string) {
 	});
 }
 
+/** 生成页与 API 规格直接进站，里面也不能留里程碑标签。 */
+function scanMilestones(file: string, text: string) {
+	text.split('\n').forEach((line, i) => {
+		if (milestonePattern.test(line)) problems.push(`${file}:${i + 1}: 含里程碑标签`);
+	});
+}
+
 for (const path of new Glob('**/*.{md,mdx}').scanSync(docsDir)) {
 	const abs = join(docsDir, path);
 	const rel = relative(root, abs);
 	const text = readFileSync(abs, 'utf8');
 	const fm = frontmatter(text);
 	scanBroken(rel, text);
-	if (fm.generated === true) continue;
+	if (fm.generated === true) {
+		scanMilestones(rel, text);
+		continue;
+	}
 
 	// frontmatter 的 sources.section 必须照抄 Oryn 原标题（可能带里程碑标签），只查正文
 	const body = text.replace(/^---\r?\n[\s\S]*?\r?\n---/, (fm) => '\n'.repeat(fm.split('\n').length - 1));
@@ -82,7 +93,12 @@ for (const path of new Glob('**/*.{md,mdx}').scanSync(docsDir)) {
 const refData = join(root, 'reference-data');
 if (existsSync(refData)) {
 	for (const path of new Glob('**/*').scanSync(refData)) {
-		if (path === 'openapi.yaml' || path === 'config.json') continue;
+		if (path === 'config.json') continue;
+		if (path === 'openapi.yaml') {
+			// API 端点页由它直接渲染：只查里程碑标签（sync 时已清洗）
+			scanMilestones('reference-data/openapi.yaml', readFileSync(join(refData, path), 'utf8'));
+			continue;
+		}
 		const abs = join(refData, path);
 		const text = readFileSync(abs, 'utf8');
 		scanLeaks(relative(root, abs), text);

@@ -76,7 +76,7 @@ Provider 放在另一台主机时，`url` 与 `orb_url` 都写主域名（`https
 | `docker.types.<名称>.runtime` | 字符串 | 空 | `runtime` 是 `docker run --runtime` 的值；只接受空（Docker 默认）或 sysbox-runc。 约束：空或 `sysbox-runc`；Provider 启动时预检，`docker info` 里没有该 runtime 就拒绝启动。 |
 | `docker.types.<名称>.nested_docker` | 布尔 | `false` | `nested_docker` 为 true 时该类型的 orb 内由 orbd 监督 dockerd；要求 `runtime` 为 sysbox-runc。 约束：要求 `runtime` 为 `sysbox-runc`；不支持特权模式。 |
 | `docker.default_type` | 字符串 | `medium` | 未指定类型时使用的规格名称。 约束：`driver: docker` 时须是 `types` 里的名称。 |
-| `docker.pids_limit` | 整数 | `4096` | `pids_limit` 是所有类型的 `docker run --pids-limit`；缺省 4096，0 = 不限。 约束：不能为负（`0` = 不限）。 |
+| `docker.pids_limit` | 整数 | `4096` | `pids_limit` 是所有类型的 `docker run --pids-limit`（审查修复）；缺省 4096，0 = 不限。 约束：不能为负（`0` = 不限）。 |
 | `docker.sandbox.enabled` | 布尔 | `false` | 是否让这个 Docker Provider 提供 Agent 沙箱（`backend: docker`）。为 `false` 时 `network`、`dns`、`socket_dir` 不校验。开启前要重建镜像（`make image`）。 |
 | `docker.sandbox.network` | 字符串 | 空 | `network` 是 egress 模式接入的 docker 网络（由 deploy/docker/oryn-sbx-net.sh 建立）；`enabled` 时必填。 约束：`enabled` 时必填；Provider 预检与启动时要求 `docker network inspect <network>` 成功。 |
 | `docker.sandbox.dns` | 字符串列表 | `[]` | `dns` 是 egress 模式的 --dns，每项须是 IP。 约束：每项须是 IP。 |
