@@ -1,0 +1,158 @@
+---
+title: 新建线程与选择执行位置
+description: 在首屏输入框或命令行开一个线程，并决定它和谁对话、属于哪个项目、在哪台机器上运行。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### 首屏直达'
+  - file: docs/features.md
+    section: '### orb 跟随线程'
+  - file: docs/features.md
+    section: '### 四种执行后端'
+  - file: docs/features.md
+    section: '### 转录与工具卡'
+  - file: web/src/pages/HomePage.tsx
+  - file: web/src/components/runner/RunnerPicker.tsx
+  - file: web/src/pages/settings/InputSettings.tsx
+  - file: web/src/lib/shortcuts.ts
+  - file: cmd/oryn/thread.go
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 1
+---
+
+线程是你和 Agent 的一段对话，连同它运行的那台机器。每个新线程都会得到一台新的执行环境（orb），或者从预热池里认领一台；界面上不列出已有环境，也不让你挑选或清理它们。新建时你要定下三件事：和谁对话、属于哪个项目、在哪里运行。
+
+## 在首屏输入框里写下任务
+
+点侧栏的「新建线程」，或按 <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>，回到首屏。标题是「要做点什么？」，输入框提示「描述任务… 可粘贴或拖入图片」。
+
+输入框底部是一排胶囊，从左到右依次是对象、执行位置、浏览器 Profile、项目，最后是发送钮。焦点在首屏时，下列组合键打开或收起对应的弹层：
+
+| 组合键 | 弹层 |
+|---|---|
+| <kbd>Ctrl/⌘</kbd>+<kbd>S</kbd> | 对象（角色胶囊） |
+| <kbd>Ctrl/⌘</kbd>+<kbd>M</kbd> | 执行位置 |
+| <kbd>Ctrl/⌘</kbd>+<kbd>B</kbd> | 浏览器 Profile（只在输入框里、且胶囊出现时生效；其余时候是收起 / 展开侧边栏） |
+| <kbd>Ctrl/⌘</kbd>+<kbd>J</kbd> | 项目 |
+
+胶囊直接显示实际生效的值，不写「默认」。你没有改过的胶囊在请求里不带字段，换了项目之后跟着新项目的默认值走。
+
+## 选择对话对象
+
+角色胶囊（弹层标题「对话对象」）里有三类选项：
+
+- **全局助手**：发送后新建一段助手对话，而不是工作线程。
+- **轮换里的角色（role）**：新线程以该角色开场。
+- **指定模型与思考档位**：不经角色，直接用所选的模型开场。
+
+在首屏或线程页按 <kbd>Ctrl/⌘</kbd>+<kbd>P</kbd> 切到轮换里的下一个角色，<kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> 切回上一个；没有配置模型的角色会被跳过。胶囊右下角的图标是实际生效的思考档位，档位的推定顺序见[读懂转录与工具卡](/guide/threads/transcript/)。
+
+选全局助手时，执行位置、项目、浏览器 Profile 三个胶囊收起，它们的组合键也不响应。附件会传进助手的文件库；发送即新建助手对话，首条消息、附件与所选模型一并带上。助手能做什么见[认识全局助手](/guide/assistant/overview/)。
+
+### 设置首屏的默认对象
+
+设置 → 输入与快捷键 →「新对话默认对象」决定每次打开首屏时预选哪个对象：
+
+| 选项 | 含义 |
+|---|---|
+| 「Agent（default role）」 | 按 `config.yml` 里的 default role 在新线程里工作 |
+| 「全局助手」 | 发给全局助手，由它来安排 |
+
+这项设置保存在服务端，各设备一致。
+
+## 选择项目
+
+项目胶囊列出你的项目，第一项是「无项目」。所选项目决定新环境默认用哪个 Provider、哪种类型、哪个浏览器 Profile。项目绑定了 GitHub 仓库时，在输入框里键入 `#` 可以引用该仓库的 issue 与 PR，见[输入框：发送、引导与排队](/guide/threads/composer/)。
+
+## 选择执行位置
+
+执行位置弹层分三组：
+
+| 分组 | 线程在哪里运行 | 说明 |
+|---|---|---|
+| 「新 orb」 | 某个 Provider 上的一台新环境 | 按 Provider 列出它的环境类型与核数，离线的 Provider 会标出 |
+| 「Runners」 | 你自己机器上的一个目录 | 线程直接在那个目录里工作，使用那台机器自己的 omp 配置与 git 凭据 |
+| 「Boxes」 | 一台 box 本身（「机器」），或 box 上某个应用的线上目录 | 已停止的 box 不能开线程 |
+
+### 新环境落在哪个 Provider 与类型
+
+不改执行位置时，控制面按下面的顺序解析：
+
+- Provider：项目默认 → 控制面的 `orb_defaults` → 唯一可用的 Provider。
+- 类型：项目默认 → 控制面的 `orb_defaults` → 该 Provider 的默认类型。
+
+解析不出来（Provider 不存在或已停用、类型不在它的类型表里）时，控制面拒绝新建。四种后端的差别见[选择执行后端](/guide/environments/backends/)。
+
+### 在 Runner 的目录里工作
+
+在「Runners」分组里点开一台在线的 Runner，它声明的目录会列出来。选中目录后：
+
+- 可以填一个子路径，必须相对于所选目录，不能含 `.` 或 `..`。
+- 目录本身是 git 仓库时，行尾可以在「当前目录」与「新 worktree」之间切换。选「新 worktree」会在该目录旁新建同名目录与分支；名字缺省取提示词前几个词，只能用字母、数字与 `.` `_` `-`，以字母或数字开头，最长 63 个字符。
+
+所选目录已有别的线程在用时，会弹出「目录已被占用」：
+
+- 「新建 worktree（推荐）」：在仓库旁新建目录与同名分支，两个线程互不干扰。
+- 「仍然共用」：两个 Agent 会改同一份文件，可能互相覆盖改动。
+
+接入 Runner 的步骤见[在自己的机器上跑线程（Runner）](/guide/environments/runner/)。
+
+### 在 box 上工作
+
+在「Boxes」分组里选一台 box 的「机器」，或它上面的某个应用。选中的 box 或应用暂时不能开线程时，界面提示「这台 Box 或应用现在不能开线程，换一个执行位置。」两种工作目录的区别见[在 box 上开线程](/guide/boxes/threads-on-box/)。
+
+### 浏览器 Profile
+
+浏览器 Profile 胶囊只在执行位置是新环境、且你至少有一个 Profile 时出现；Runner 与 box 用那台机器自己的浏览器。所选 Profile 正被另一台运行中的环境使用时，会让你选择以只读副本使用或接管，见[浏览器 Profile：复用登录态](/guide/workbench/browser-profiles/)。
+
+## 用命令行新建线程
+
+`oryn thread new` 与首屏输入框对应：提示词是位置参数，其余选择用参数给出。
+
+```bash
+# 在项目里新建一台环境并开线程
+oryn thread new "<提示词>" --project <项目名> --provider <Provider 名> --type <类型>
+
+# 在 Runner 的目录旁新建 worktree 并开线程
+oryn thread new "<提示词>" --runner <Runner 名> --dir <Runner 上的绝对路径> --worktree <名字>
+
+# 在 box 上某个应用的线上目录里开线程
+oryn thread new "<提示词>" --box <box 名> --app <应用名>
+```
+
+| 首屏上的选择 | 参数 |
+|---|---|
+| 项目 | `--project <项目名>`；`--no-project` 不关联项目 |
+| 新环境的 Provider 与类型 | `--provider`、`--type` |
+| 挂到已有环境 | `--orb <orb-…>` |
+| Runner 目录 | `--runner` 与 `--dir`；`--worktree <名字>` 在目录旁新建 worktree；`--share-dir` 允许与其它未归档线程共用目录 |
+| box | `--box`；`--app` 让工作目录是该应用的线上目录 |
+| 浏览器 Profile | `--browser-profile <名字或 id>`（`none` 表示不用）；`--readonly` 只读使用；`--takeover` 接管 |
+| 其它 | `--title`、`--label`（可重复）、`--space`、`--json` |
+
+`oryn thread new` 没有选择角色或模型的参数。挂到已有环境（`--orb`）只在界面之外提供，留给脚本与高级用法。
+
+参数之间的约束：
+
+- `--project` 与 `--no-project` 不能同时使用。
+- `--orb` 与 `--provider` / `--type` 不能同时使用。
+- `--runner` 需要 `--dir`（Runner 上的绝对路径）；`--dir`、`--worktree`、`--share-dir` 需要与 `--runner` 一起使用；`--runner` 不能与 `--orb` / `--provider` / `--type` 同时使用。
+- `--worktree` 与 `--share-dir` 不能同时使用。
+- `--box` 不能与 `--runner` / `--orb` / `--provider` / `--type` 同时使用；`--app` 需要与 `--box` 一起使用。
+- `--browser-profile` / `--readonly` / `--takeover` 只对新建环境有效，不能与 `--orb`、`--box` 或 `--runner` 同时使用；`--readonly` 与 `--takeover` 不能同时使用。
+
+在环境内运行 `oryn thread new` 时，它在本项目里开一个子线程，只接受 `--title`、`--type`、`--json`。完整参数见 [`oryn thread`](/reference/cli/thread/)。
+
+## 限制
+
+- worktree 名最长 63 个字符。
+
+## 相关
+
+- [输入框：发送、引导与排队](/guide/threads/composer/)
+- [环境如何随线程生灭](/guide/environments/lifecycle/)
+- [选择执行后端](/guide/environments/backends/)
+- [模型角色与思考档位](/guide/agent/roles/)
+- [`oryn thread` 命令参考](/reference/cli/thread/)

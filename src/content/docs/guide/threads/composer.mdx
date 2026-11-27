@@ -1,0 +1,119 @@
+---
+title: 输入框：发送、引导与排队
+description: 发送键的两种模式，回合进行中如何插话、排队或中断，输入前缀、引用、附件、消息预测与提示缓存读数。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### 输入框'
+  - file: web/src/lib/composer.ts
+  - file: web/src/lib/shortcuts.ts
+  - file: web/src/components/composer/RefMenu.tsx
+  - file: web/src/components/composer/attachments.tsx
+  - file: web/src/lib/attachments.ts
+  - file: web/src/pages/settings/InputSettings.tsx
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+线程页底部的输入框不只是发消息：Agent 正在工作时，你可以插话引导当前回合、排队等它做完，或者中断后改发新消息；以特定前缀开头的输入会直接执行命令。本页按要做的事说明这些操作，完整的按键表见[键盘快捷键](/reference/ui/shortcuts/)，斜杠命令见[斜杠命令与输入前缀](/reference/ui/slash-commands/)。
+
+## 选择发送键
+
+设置 → 输入与快捷键 →「输入框」→「发送键」有两种模式，只对这台设备生效：
+
+| 模式 | 发送 | 换行 |
+|---|---|---|
+| <kbd>Enter</kbd> 发送（默认） | <kbd>Enter</kbd> | <kbd>Shift</kbd>+<kbd>Enter</kbd> |
+| <kbd>Ctrl/⌘</kbd>+<kbd>Enter</kbd> 发送 | <kbd>Ctrl/⌘</kbd>+<kbd>Enter</kbd> | <kbd>Enter</kbd>、<kbd>Shift</kbd>+<kbd>Enter</kbd>、<kbd>Alt</kbd>+<kbd>Enter</kbd> |
+
+## 在回合进行中插话、排队或中断
+
+Agent 正在工作时，输入框提示「引导正在进行的回合…」。这时同一个发送手势有三种用法：
+
+| 动作 | 含义 | <kbd>Enter</kbd> 发送模式 | <kbd>Ctrl/⌘</kbd>+<kbd>Enter</kbd> 发送模式 |
+|---|---|---|---|
+| 引导 | 把消息插入当前回合 | <kbd>Enter</kbd> | <kbd>Ctrl/⌘</kbd>+<kbd>Enter</kbd> |
+| 排队 | 回合结束后再发送 | <kbd>Ctrl/⌘</kbd>+<kbd>Enter</kbd> | <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd> |
+| 中断并发送 | 中止当前回合，立即发这条消息 | <kbd>Alt</kbd>+<kbd>Enter</kbd> | <kbd>Ctrl/⌘</kbd>+<kbd>Alt</kbd>+<kbd>Enter</kbd> |
+
+只想停下 Agent、不发新消息时，连按两次 <kbd>Esc</kbd>（间隔不超过 500 毫秒）中断回合。空闲时连按两次 <kbd>Esc</kbd> 是回退，见[回退、分叉与会话树](/guide/threads/rewind-fork/)。
+
+排队中的消息列在「排队中」里，每条可以「编辑」「提前发送」或「删除」，也可以「清空」整个队列。
+
+## 用前缀直接执行命令
+
+输入框里以下列前缀开头的内容不作为普通消息发给 Agent：
+
+| 输入 | 效果 |
+|---|---|
+| `!命令` | 运行 bash 命令 |
+| `!!命令` | 运行 bash 命令，不进 Agent 的上下文 |
+| `$ 代码` | 运行 Python eval |
+| `$$ 代码` | 运行 Python eval，结果不进上下文 |
+| `? 问题` | 旁路提问（同 `/btw`）：不打断主线，也不进主线上下文 |
+| `-> 消息` 或 `=> 消息` | 排队，回合结束后发送 |
+| `/` 开头 | 斜杠命令 |
+| 单独一个 `.` | 继续（resume） |
+
+`$` 与 `$$` 后面必须紧跟空白字符，所以 `$HOME`、`$100` 这样的文字不会被当成 Python。`??` 开头不是旁路提问。
+
+## 引用回复
+
+在 Agent 的回复里选中一段文字，选「引用回复」，这段文字以 Markdown 引用块随你的下一条消息发出；回合进行中会自动作为引导发出。有选区时转录暂停自动贴底，流式输出不会把选区冲走。更多选区动作见[选区动作与右键菜单](/guide/threads/selection-actions/)。
+
+## 引用 GitHub issue 与 PR
+
+项目绑定了 GitHub 仓库时，在行首或空白之后键入 `#` 和关键字，会弹出该仓库的 issue 与 PR 候选。用 <kbd>↑</kbd> <kbd>↓</kbd> 选择，<kbd>Enter</kbd> 或 <kbd>Tab</kbd> 选中，<kbd>Esc</kbd> 关闭菜单。选中后 `#关键字` 从文本里删掉，该 issue 或 PR 连同评论渲染成 Markdown 附件加入这条消息。
+
+给全局助手发消息时不提供 `#` 引用。连接 GitHub 见 [GitHub：仓库绑定、PR 与回流](/guide/automation/github/)。
+
+## 添加附件
+
+粘贴、拖入或点「添加附件」选择任意文件，文件加入后立即开始上传到控制面，状态显示「上传中」与百分比；仍在上传时发送会提示「附件仍在上传，请稍候再发送」。
+
+- 图片另外压缩出一份内联副本，模型可以直接看到。整条消息的内联预算用完后，其余图片只作为文件附件，标为「仅文件」。
+- 附件保存在 Oryn 中、随线程保留，不会进入仓库；删除线程时一并删除。
+- 在全局助手的对话里，文件传进助手的文件库，见[文件库](/guide/assistant/library/)。
+
+## 开启下一条消息预测
+
+设置 → 输入与快捷键 →「输入框」→「预测我的下一条消息」。开启后，每轮正常完成都会用当前模型猜你接下来要发的消息，以灰色文字显示在空输入框里：
+
+- 按 <kbd>Tab</kbd> 或 <kbd>→</kbd> 插入，不会发送；触屏上点一下灰色文字也能插入。
+- 再打开「提供多个候选」，同一次请求最多给出 4 条预测，插入一条后再按 <kbd>Tab</kbd> 换下一条。
+- 草稿只要还是某条预测的开头，提示就一直显示；新回合开始、清空上下文或跳转会话树时，旧预测自动撤回。
+
+这两个开关写进 omp 的 `config.yml`，下发到环境和全局助手。
+
+<Aside type="note">
+预测默认关闭。开启后每完成一轮都会多发一次计费请求，请求带着整段对话。
+</Aside>
+
+## 读懂提示缓存读数
+
+输入框页脚右侧、上下文圆环之前，有一个同款的小圆环随缓存存活期倒计时消退，后面是剩余时间（如 `4:32`）与当前活动上下文的缓存命中率。命中率只算活动分支上、压缩后仍在上下文里的请求，不含压缩前的记录与旁支。剩余不到两成时转黄。
+
+缓存失效时换成红色虚线圈「缓存已冷 · 重写 128k」，数字是下一条消息要重新写入的 token 数；只改了思考级别、系统提示词等时显示「最多重写」。
+
+悬停或点按圆环打开详情卡：剩余时间与进度、存活档位与到期时刻、下一条消息读缓存与新发多少、上下文命中率、缓存前缀大小、自动续期（下次续期时刻、何时放弃，或停止原因）；失效时写明原因，例如存活期已到、换了模型 / 思考级别 / 工具集、上下文已压缩。模型没有缓存存活时长时不显示这组读数。
+
+## 限制
+
+| 项 | 上限 |
+|---|---|
+| 每条消息的附件 | 20 个 |
+| 单个附件 | 100 MiB |
+| 预测候选 | 4 条 |
+| 连按两次 <kbd>Esc</kbd> 的间隔 | 500 毫秒 |
+
+## 相关
+
+- [键盘快捷键](/reference/ui/shortcuts/)
+- [斜杠命令与输入前缀](/reference/ui/slash-commands/)
+- [回退、分叉与会话树](/guide/threads/rewind-fork/)
+- [选区动作与右键菜单](/guide/threads/selection-actions/)
+- [读懂转录与工具卡](/guide/threads/transcript/)
