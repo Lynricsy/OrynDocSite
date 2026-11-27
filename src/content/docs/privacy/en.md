@@ -62,7 +62,7 @@ Oryn's agent and assistant features rely on third-party model providers. When yo
 
 Providers are configured by the server owner on the server and may include Anthropic, OpenAI, Google, DeepSeek, OpenRouter, or any OpenAI-compatible service. Data is sent directly from your server to the provider, without passing through us, and each provider handles it under its own privacy policy and terms.
 
-Before you use AI features in the app for the first time, the app lists the providers that will receive your data and asks for your explicit consent; it asks again whenever the server adds a new provider. You can review the recipients and withdraw consent at any time in Settings → Privacy & data. After you withdraw consent, AI features cannot be used in the app.
+Before you use AI features in the app for the first time, the app lists the providers that will receive your data and asks for your explicit consent; it asks again whenever the server adds a new provider. Until you consent, your server does not send your data to any provider you have not approved, and background jobs (scheduled tasks, memory processing, web research) are refused as well. You can review the recipients and withdraw consent at any time in Settings → Privacy & data; after you withdraw, your server stops sending new requests to those providers and AI features stop working. One exception: a model key that the server owner hands to an execution environment as an environment variable (a non-built-in provider without a `baseUrl`) is only withdrawn the next time that environment starts.
 
 ## Other third-party services you configure
 
