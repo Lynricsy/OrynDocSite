@@ -1,0 +1,151 @@
+---
+title: 环境配置：setup、resume、快照与预热
+description: 用生命周期脚本声明项目的开发环境，处理 setup 失败，并用项目快照与预热池缩短新线程的准备时间。
+type: how-to
+sources:
+  - file: docs/features.md
+    section: '### 环境自配置'
+  - file: docs/features.md
+    section: '### 项目快照与预热池'
+  - file: docs/features.md
+    section: '### 项目'
+  - file: docs/features.md
+    section: '#### 项目级密钥与环境变量'
+  - file: docs/deploy.md
+    section: '### 项目快照'
+  - file: docs/deploy.md
+    section: '### 预热池'
+  - file: internal/orbdrt/setup.go
+  - file: cmd/oryn/orb_setup.go
+  - file: cmd/oryn/project.go
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+每个新线程都在一台新的执行环境（orb）里开始。项目的开发环境由两个生命周期脚本声明：`setup` 在新环境首次创建时执行一次，`resume` 在环境冻结后唤醒时执行。setup 成功后 Oryn 给环境拍一份项目快照，之后的新线程从快照启动、跳过构建；高频项目还可以保留几台已经完成 setup 的预热环境。
+
+脚本的查找顺序、日志与失效规则的完整说明见 [`.oryn/setup` 与 `.oryn/resume`](/reference/project-files/setup-resume/)。
+
+## 写 setup 与 resume 脚本
+
+| 脚本 | 何时执行 | 时间限制 |
+|---|---|---|
+| `.oryn/setup`（兼容 `.agents/setup`） | 新环境首次创建时执行一次 | 20 分钟 |
+| `.oryn/resume`（兼容 `.agents/resume`） | 每次冻结后唤醒时执行；从项目快照启动的新环境也直接运行它 | 最长等待 10 秒，超过后转入后台继续运行，总上限 10 分钟 |
+
+仓库里的脚本须有可执行位。`.oryn/<名>` 不存在时才回退到 `.agents/<名>`。
+
+在 `setup` 里增装系统包用 `pacman`，见[开发镜像里有什么](/guide/environments/dev-image/)：
+
+```bash
+sudo pacman -Syu --needed --noconfirm <包名>
+```
+
+从项目快照启动的环境可能在快照的基础上把 setup 增量重跑一遍（见下文），所以 setup 脚本要能重复执行。
+
+## 把脚本存在项目设置里
+
+不便入库的脚本可以保存在控制面的项目设置里：项目设置 →「环境」分组的 setup 与 resume 脚本。
+
+两处都有脚本时，同一阶段先运行项目设置里的脚本，再运行仓库里的脚本，遇错即停。每个脚本都在登录 shell 环境下运行，前一个脚本写进 profile 的 `PATH` 等对后面的脚本可见。项目设置里的脚本以 `#!` 开头时直接执行，否则用 `bash` 运行。
+
+等价命令：
+
+```bash
+# 新建项目时给出脚本（内容，或 @文件）
+oryn project create <项目名> --setup @<setup 脚本文件> --resume @<resume 脚本文件>
+
+# 在环境里读写本项目的项目脚本
+oryn orb setup project-script get setup
+oryn orb setup project-script set setup --file <脚本文件>
+```
+
+`project-script set` 的 `--file -` 表示从标准输入读取；空内容表示清除。
+
+## 处理 setup 失败
+
+脚本退出非零不会阻塞环境就绪。工作台顶部显示诊断条，你可以：
+
+- 查看日志；
+- 交给当前线程的 Agent 修复（内置 `oryn-setup` 技能）。
+
+项目主页的状态条也会显示最近一次环境 setup 失败，并链到出事的线程；设置「环境」分组里有最近一次环境 setup 的结果。
+
+在环境里的终端用下面的命令查看与重跑：
+
+```bash
+oryn orb setup status          # 最近一次 setup / resume 的结果
+oryn orb setup logs            # setup 日志末尾，缺省 200 行；--resume 看 resume 日志
+oryn orb setup run             # 重跑 setup 并实时输出；--resume 重跑 resume
+```
+
+`oryn orb setup run` 的退出码：0 成功，1 失败，2 调用错误。日志文件在环境里的 `~/.cache/oryn/logs/setup.log` 与 `~/.cache/oryn/logs/resume.log`。
+
+## 拉取 Git LFS 文件
+
+仓库里的 Git LFS 文件不在克隆或更新仓库时随检出下载，由 setup 随后统一用 `git lfs pull` 取下。
+
+取不下时（对象不存在、凭据被拒、环境里没有 `git-lfs`），setup 记为失败，线程里出现「环境 setup 失败」，没取到的文件仍是指针文本。修好原因后在仓库根运行：
+
+```bash
+git lfs pull
+```
+
+## 使用项目快照
+
+项目首次完成 `.oryn/setup` 后自动生成干净的磁盘快照：Docker 提交镜像，Firecracker 用 `reflink` 复制稀疏盘。之后同一项目、同一 Provider、同一类型的新环境从快照启动，跳过构建，直接运行 `.oryn/resume`。
+
+**什么时候拍**：环境第一次 setup 成功、setup 用时不少于 `snapshots.min_setup`，并且 Agent 从未在这台环境上运行过。快照在 setup 脚本跑完、resume 与受管服务启动之前拍，所以快照里只有 setup 的产物，没有会话、附件、浏览器 Profile、Agent 的改动，也没有服务运行时写下的东西。
+
+**从快照启动时**：环境会 `git fetch` 基线。HEAD 没变就跳过 setup、只跑 resume；HEAD 变了就在快照的环境上把 setup 增量重跑一遍，成功后发布新快照。
+
+**什么时候失效**：下列任一项变化，旧快照就退役，下一个环境从基础镜像全新 setup：
+
+- 项目的仓库、分支、setup 脚本；
+- 项目的 env 模式密钥与降级模型 key（只看名字与修改时间），以及项目级环境变量；
+- Provider 的基础镜像；
+- 新的基线改动了仓库里的 `.oryn/setup`、`.agents/setup`、`.oryn/services.yaml` 或 `.amp/services.yaml`（内容、可执行位、符号链接目标任一变化都算）；
+- 旧 HEAD 不是新基线的祖先（例如 force push）。
+
+同一条快照血统的复用时长与刷新次数也有上限，由管理员设置，见[快照与预热池](/admin/backends/snapshots-pool/)。
+
+在项目设置「环境」分组的「快照与预热」里开关项目快照、查看快照表。等价命令：
+
+```bash
+oryn project snapshots ls <项目>
+oryn project snapshots rm <项目> [--type <类型>]
+```
+
+<Aside type="caution">
+怀疑某次 setup 把不该留的东西（后门、泄露的凭据）拍进了快照时，执行 `oryn project snapshots rm <项目>`。可用的和正在构建的快照一起作废，之后的环境从基础镜像全新 setup。
+</Aside>
+
+## 保留预热环境
+
+在项目设置「环境」分组的「快照与预热」里把预热环境数设成 1–3，控制面就为这个项目保持这么多台已完成 setup、还没绑定线程的环境，新线程直接认领，跳过创建与 setup。
+
+- 预热环境常驻占用内存，空闲时照常被冻结，每 12 小时换新一次（`pool.max_age` 缺省值）。
+- 以下情况不预热：项目既没有仓库也没有 setup 脚本；72 小时内（`pool.active_window` 缺省值）没有新线程；Provider 离线；上一台预热环境的 setup 失败后 1 小时内。
+- 请求了浏览器 Profile 的线程不认领预热环境。
+- 全局的预热环境总数由管理员用 `pool.max_total` 限制，设成 0 即关闭。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| setup 时间上限 | 20 分钟 |
+| resume 前台等待 | 10 秒 |
+| resume 总上限 | 10 分钟 |
+| 每个项目的预热环境 | 1–3 台 |
+| 预热环境换新周期 | `pool.max_age`，缺省 12 小时 |
+
+## 相关
+
+- [`.oryn/setup` 与 `.oryn/resume`](/reference/project-files/setup-resume/)
+- [环境如何随线程生灭](/guide/environments/lifecycle/)
+- [快照与预热池（管理员）](/admin/backends/snapshots-pool/)
+- [`oryn orb`](/reference/cli/orb/)、[`oryn project`](/reference/cli/project/)
