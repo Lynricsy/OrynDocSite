@@ -1,0 +1,18 @@
+@import '@fontsource-variable/mona-sans';
+@import '@fontsource-variable/noto-sans-sc';
+@import '@fontsource-variable/jetbrains-mono';
+@import '@fontsource-variable/fraunces';
+
+:root {
+	--sl-font: 'Mona Sans Variable', 'Noto Sans SC Variable', ui-sans-serif, system-ui, 'PingFang SC',
+		'Microsoft YaHei', sans-serif;
+	--sl-font-mono: 'JetBrains Mono Variable', 'Noto Sans SC Variable', ui-monospace, 'SF Mono', Menlo,
+		Consolas, monospace;
+}
+
+.site-title {
+	font-family: 'Fraunces Variable', 'Noto Sans SC Variable', ui-serif, Georgia, serif;
+	font-weight: 500;
+	font-variation-settings: 'opsz' 72;
+	letter-spacing: -0.01em;
+}

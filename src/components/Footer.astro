@@ -1,0 +1,17 @@
+---
+import Default from '@astrojs/starlight/components/Footer.astro';
+import lock from '../../oryn.lock.json';
+---
+
+<Default><slot /></Default>
+<p class="oryn-version">
+	内容对应 Oryn {lock.describe}（{lock.commit.slice(0, 12)}）。界面截图使用演示数据。
+</p>
+
+<style>
+	.oryn-version {
+		margin-top: 1rem;
+		font-size: var(--sl-text-xs);
+		color: var(--sl-color-gray-3);
+	}
+</style>

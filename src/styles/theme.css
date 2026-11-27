@@ -1,0 +1,30 @@
+/* Oryn 品牌色：盐原 / 墨色。浅色主题里 white 是最深的文字色、black 是页面底色。 */
+:root {
+	--sl-color-accent-low: #12343a;
+	--sl-color-accent: #2f7f8c;
+	--sl-color-accent-high: #bfd9e2;
+	--sl-color-white: #f4f0e8;
+	--sl-color-gray-1: #e6e0d5;
+	--sl-color-gray-2: #c9c4ba;
+	--sl-color-gray-3: #8f989d;
+	--sl-color-gray-4: #566067;
+	--sl-color-gray-5: #2a3238;
+	--sl-color-gray-6: #1a2126;
+	--sl-color-black: #11161a;
+	--sl-content-width: 46rem;
+}
+
+:root[data-theme='light'] {
+	--sl-color-accent-low: #d6e8eb;
+	--sl-color-accent: #266b77;
+	--sl-color-accent-high: #17434a;
+	--sl-color-white: #11161a;
+	--sl-color-gray-1: #1d2429;
+	--sl-color-gray-2: #2f3a41;
+	--sl-color-gray-3: #56636b;
+	--sl-color-gray-4: #7d8990;
+	--sl-color-gray-5: #c9c4ba;
+	--sl-color-gray-6: #e6e0d5;
+	--sl-color-gray-7: #efeae1;
+	--sl-color-black: #f8f5ef;
+}
