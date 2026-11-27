@@ -1,0 +1,135 @@
+---
+title: 仓库镜像与托管仓库入口
+description: 控制面为项目维护的仓库镜像放在哪里、怎样保护数据盘，托管仓库的 /git/ 入口如何认证与限流，以及环境里的 git 请求按什么规则放行。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '### 项目仓库镜像'
+  - file: docs/deploy.md
+    section: '### 托管仓库入口 `/git/`'
+  - file: docs/deploy.md
+    section: '### git 出站策略'
+  - file: docs/deploy.md
+    section: '## 3. 反代（1Panel OpenResty）'
+  - file: docs/deploy.md
+    section: '## 2. 控制面配置 `/etc/oryn/orynd.yaml`'
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 7
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+控制面在 `<data_dir>/repos/` 为每个有 `https://` 仓库地址的项目维护一份完整裸镜像，项目页的提交、文件与 README 都从这里读；Oryn 托管仓库的正本也放在这里，并经 `<public_url>/git/` 对外提供 git 访问。本页说明管理员需要了解的目录、磁盘保护、`/git/` 入口与 git 出站规则。项目页上的用法见[仓库浏览](/guide/projects/repo-browser/)与[托管仓库](/guide/projects/hosted-repo/)。
+
+## 了解镜像目录
+
+`<data_dir>/repos/`（0700）里有：
+
+| 路径 | 内容 | 何时删除 |
+|---|---|---|
+| `<项目 id>.git` | 外部仓库的裸镜像，全部 `refs/heads/*` 与 `refs/tags/*`（不含 PR 引用） | 项目删除、仓库地址改指别的仓库、镜像超过 `max_mirror_gb` 时 |
+| `<项目 id>.git`（带标记文件 `oryn-hosted`） | Oryn 托管项目的正本 | 只有删除项目才会删 |
+| `.home/` | 控制面 git 的 `HOME` 与 `XDG_CONFIG_HOME`，与 `orynd` 用户自己的 git 配置隔开 | — |
+| `.lfs-cache/<项目 id>/` | 镜像项目的 Git LFS 对象缓存，总量受 `max_lfs_cache_gb` 约束。托管项目的 LFS 对象在它自己的 `<项目 id>.git/lfs/objects/` 里，不进缓存 | 超过上限时先删最久没用的对象 |
+| `orphaned/` | 项目行已不存在的托管正本（例如把库恢复到了旧备份），按 `<项目 id>.git-<Unix 秒>` 保存 | 不自动删除；确认不要了再手工删掉 |
+| `<id>.git.tmp-*`、`<id>.git.trash-*` | 克隆中的半成品与待删的目录 | 启动时清掉 |
+
+启动时，控制面还会删掉项目已不存在的镜像（托管正本移到 `orphaned/`）、托管仓库残留的 LFS 上传临时目录 `lfs/tmp/`，以及各仓库里 10 分钟前留下的 `HEAD.lock`、`packed-refs.lock`、`refs/**/*.lock`（断电或 OOM 后的残留）。
+
+<Aside type="caution">
+托管仓库的正本没有别的副本。备份 `data_dir` 时必须包含 `repos/`，并与 `oryn.db` 一起备份、一起恢复。见[备份](/admin/operations/backup/)。
+</Aside>
+
+## 设置镜像上限与磁盘保护
+
+`orynd.yaml` 的 `repos` 段控制镜像占用的磁盘：`max_mirror_gb`（单个镜像，缺省 5）、`max_lfs_cache_gb`（LFS 缓存合计，缺省 2）、`min_free_gb`（数据盘至少保留的可用空间，缺省 2）。三个上限都可以在「设置 → 控制面」里覆盖，改完不用重启。各键的完整说明见[配置控制面](/admin/install/control-plane/)。
+
+磁盘保护的做法：
+
+- 克隆与拉取开始前、进行中每 5 秒检查数据盘可用空间，低于 `min_free_gb` 就不执行或终止，记 `no_space`；取 LFS 对象前同样检查（可用空间减去对象大小）。
+- 克隆或拉取过程中每 5 秒复查镜像大小，超过 `max_mirror_gb` 就终止 git；项目页显示「仓库超过镜像大小上限」。
+- 取消与超时先向 git 的进程组发 SIGTERM，10 秒后仍未退出才 SIGKILL，免得留下锁文件。
+
+## 了解控制面如何执行 git
+
+- 环境变量从空白开始，只放 `PATH`、`HOME`、`GIT_CONFIG_NOSYSTEM=1`、`GIT_TERMINAL_PROMPT=0`、`LC_ALL=C` 与低速中止阈值（60 秒内低于 1000 B/s）。命令行固定带 `protocol.allow=never`（只开 https / http）与 `core.hooksPath=/dev/null`。系统与用户的 git 配置、钩子、模板都不生效。
+- 凭据只经环境变量交给 git：github.com 用你的 GitHub 账号令牌，其它主机用全局密钥 `git/<host>/token`，并关闭重定向跟随。令牌不进命令行、不写磁盘配置，git 的错误输出写库或写日志前先脱敏。
+- **担保主机**（github.com，或有令牌的主机）沿用 `orynd` 进程的 `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY`（大小写两种写法）；需要经代理出网的部署，镜像与 GitHub 集成走同一个代理。**未担保主机**（没有令牌的其它主机）不读这些变量，而是经公网地址守卫：只接受 CONNECT 443，连接时检查实际 IP，私有、回环、链路本地等地址一律拒绝，项目页显示「仓库主机解析到内网地址，已拦截」。
+- 镜像项目的 LFS 对象由控制面用内置的 Go 客户端取，不需要 `git-lfs`；只请求仓库主机自己的 `<仓库>.git/info/lfs/objects/batch`，不读仓库里的 `.lfsconfig`。下载地址在别的主机时不带 Oryn 的凭据，并一律经公网地址守卫。内容按指针校验大小与 sha256，不符不入缓存。
+
+## 配置托管仓库入口 /git/
+
+托管仓库经 `<public_url>/git/<项目 id>.git/…` 提供 smart-HTTP 与 Git LFS。控制面直接执行 `git upload-pack` / `git receive-pack --stateless-rpc`，不需要 `git http-backend`。
+
+### 反代要求
+
+主域名的 `/git/` 要放开请求体上限并关闭请求缓冲：`client_max_body_size 0` 与 `proxy_request_buffering off`，其余各行与 `location /` 相同。你本机的 `git push` 与 Git LFS 上传经这里到达控制面，托管仓库不设大小上限；缺少这两项时，大推送会被 413 拒绝，或先整个缓冲到反代的磁盘上。执行环境（orb）里的推送与上传不经这里。示例配置见[反向代理与 HTTPS](/admin/install/reverse-proxy/)。
+
+### 认证
+
+- **只认设备令牌**：`Authorization: Basic <任意用户名>:<odt_…>`（git 凭据助手 `oryn git-credential` 给的就是这个），或 `Bearer odt_…`。令牌须存在且未吊销；从不读 Cookie，浏览器的登录会话访问不了。吊销设备即撤销它对全部托管仓库的访问。
+- 先鉴权再查项目，项目是否存在不向匿名者泄露。鉴权失败回 401 加 `WWW-Authenticate: Basic realm="Oryn"`；带 `Sec-Fetch-Site` 的浏览器请求不回这个头，免得弹出原生口令框。
+- 路径只接受固定的几种端点，`..`、多余的段一律 404。
+
+客户端怎样配置凭据，见[托管仓库](/guide/projects/hosted-repo/)与 [`oryn git-credential`](/reference/cli/git-credential/)。
+
+### 读写与并发
+
+- 已归档项目的仓库只读，推送与 LFS 上传回 403。
+- 每个项目同一时刻只处理一个推送，等锁超过 60 秒回 503。请求体 120 秒没有新数据就关闭 `receive-pack` 的输入。
+- 环境只能访问本项目的托管仓库：请求在控制面本地服务，不注入任何令牌；同一 Oryn 地址上别的托管仓库回 403。环境推上来的对象先过 `receive.fsckObjects`，带 `.git` 路径项或恶意 `.gitmodules` 的树进不来。
+- 被删除或被强推覆盖的分支旧值留存在 `refs/oryn/saved/` 下 30 天，客户端看不见、也改不了这些 ref。
+- Git LFS 用批量接口加 basic 传输，不实现文件锁（锁接口 404）。上传边写边校验大小与 sha256，不符不落盘。
+
+### 资源
+
+- 托管 git 进程全局至多 8 个、每台环境 2 个，没有名额回 503 加 `Retry-After: 5`。
+- LFS 对象传输另有名额：全局 16、每台环境 8，排队至多 30 秒。
+- 推送开始前与进行中每 5 秒、LFS 上传每写 64 MiB 检查一次数据盘，可用空间低于 `repos.min_free_gb` 时拒绝或终止：推送回 503「控制面磁盘空间不足」，LFS 上传回 507。
+
+### 推送后 Webhook
+
+只有所有者能设置，不在助手的工具里。地址不检查是否内网，等同你自己发请求。签名密钥用主密钥加密保存，从不经 API 返回。投递用 `orynd` 进程的出站环境（会读代理变量），不跟随重定向。载荷与验签示例见[托管仓库](/guide/projects/hosted-repo/)。
+
+## 了解环境里 git 请求的放行规则
+
+环境里的 git 请求经环境内的本机代理到达控制面，由控制面注入令牌后转发到上游；令牌从不进入环境。环境内的 `~/.gitconfig` 只把对应地址的 https 换成 http 并指向本机代理，`git remote -v` 显示的仍是原来的仓库地址。这要求环境里的 git 支持按地址配置 `http.<url>.proxy`（1.8.5 起）。
+
+| 环境 | 放行范围 |
+|---|---|
+| 有项目，且项目仓库地址是 `https://` | 只放行该项目仓库，可读可写（含 Git LFS）。同一主机上的其它仓库、其它主机一律 403 |
+| 无项目，或项目没有 `https://` 仓库地址 | 配置了 `git/<host>/token` 的主机上，任意仓库只读；推送、LFS 上传与改动文件锁一律 403 |
+| github.com，且由 GitHub 集成下发凭据 | 注入线程身份对应账号的 OAuth 令牌，不按项目仓库限制：能读写哪些仓库取决于该账号自身的权限，以及项目开启的门禁 |
+| Oryn 托管项目 | 只放行本项目的托管仓库，在控制面本地服务，不注入令牌；其它主机按“无项目”的只读规则 |
+
+setup 环境里的 `NO_PROXY` / `no_proxy` 覆盖某个主机时，环境不为它写 https→http 改写与代理：它的 remote 保持 `https://`，经 TLS 直连、不带令牌，公开仓库照常可读，私有仓库与推送会明确失败，setup 日志记一条 `warning: NO_PROXY/no_proxy covers <host> …`。把该主机从 `NO_PROXY` 和 `no_proxy` 里去掉、重新唤醒环境即可恢复。每次执行 setup / resume 时，环境按当前策略重写这些条目，项目设置变更在下一次唤醒时生效。
+
+逐条规则、LFS 端点与风险说明见 [Git 访问范围与门禁](/security/git-scope/)与[凭据隔离与出站代理](/security/credentials/)。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 单个镜像大小（`max_mirror_gb`） | 缺省 5 GB |
+| LFS 缓存合计（`max_lfs_cache_gb`） | 缺省 2 GB |
+| 数据盘保留空间（`min_free_gb`） | 缺省 2 GB |
+| 同时进行的克隆或拉取 | 至多 2 个 |
+| 首次克隆 / 增量拉取 / 读操作超时 | 15 分钟 / 5 分钟 / 20 秒 |
+| 低速中止 | 60 秒内低于 1000 B/s |
+| 镜像 LFS 对象并发 | 全局 4 个，单个项目 2 个；单次至多 15 分钟；60 秒内少于 60 KB 即中止 |
+| 托管仓库推送等锁 | 60 秒 |
+| 托管 git 进程 | 全局 8 个，每台环境 2 个 |
+| 托管 LFS 对象传输 | 全局 16 个，每台环境 8 个，排队至多 30 秒 |
+| 被覆盖分支的留存 | 30 天 |
+| 托管仓库与 LFS 对象大小 | 不设上限 |
+
+## 相关
+
+- [仓库浏览](/guide/projects/repo-browser/)
+- [托管仓库](/guide/projects/hosted-repo/)
+- [配置控制面](/admin/install/control-plane/)
+- [反向代理与 HTTPS](/admin/install/reverse-proxy/)
+- [Git 访问范围与门禁](/security/git-scope/)
+- [备份](/admin/operations/backup/)

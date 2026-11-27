@@ -1,0 +1,218 @@
+---
+title: Hindsight 记忆服务
+description: 部署 Agent 记忆所用的 Hindsight 服务，连接到控制面，并完成备份、升级、换嵌入模型与启用主人记忆。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 14. Hindsight 记忆服务（M16）'
+  - file: docs/deploy.md
+    section: '### 部署'
+  - file: docs/deploy.md
+    section: '### 备份'
+    under: '## 14. Hindsight 记忆服务（M16）'
+  - file: docs/deploy.md
+    section: '### 升级'
+    under: '## 14. Hindsight 记忆服务（M16）'
+  - file: docs/deploy.md
+    section: '### 换嵌入模型（reembed）'
+  - file: docs/deploy.md
+    section: '### 全局助手的主人记忆（M17）'
+  - file: deploy/hindsight/compose.yaml
+  - file: deploy/hindsight/.env.example
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 4
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Agent 记忆存放在一个单独部署的 [Hindsight](https://github.com/vectorize-io/hindsight)（MIT）服务里，版本固定为 1.2.x，镜像是 slim 版，不带本地模型。所有项目共用一个 bank `oryn`，靠 `project:<项目 ID>` 标签相互隔离；全局记忆打 `oryn:global` 标签，只有你在管理页批准的候选才能写入。
+
+执行环境（orb）与 Runner 里的 omp 只连控制面的记忆网关 `/memory/`，网关替它们填写项目标签，并注入 Hindsight 的 API key。Hindsight 调用模型、嵌入和重排时，也经控制面的中转 `<public_url>/memory-relay/v1/`，由控制面换上真实的模型与密钥。所以 Hindsight 的 `.env` 里没有任何 provider 密钥，环境与 Runner 里也看不到 Hindsight 的 key。
+
+记忆在线程里怎样使用，见[记忆](/guide/agent/memory/)。
+
+## 选择部署位置
+
+- **同机部署**（推荐）：部署在控制面所在的机器上。API 只发布在 `127.0.0.1:8888`，Postgres 不发布端口。
+- **远端部署**：在 `deploy/hindsight/.env` 里加一行 `HINDSIGHT_PUBLISH_ADDR=<内网地址>`，或者在 Hindsight 前面加一层 TLS 反代，只让控制面所在的机器能访问。远端地址必须用 `https://`，只有本机（`127.0.0.1`、`localhost`）和内网地址可以用 `http://`。
+
+两种方式下，Hindsight 都必须能访问控制面的 `public_url`，因为模型请求要走中转。同机部署且 `public_url` 指向本机时，容器经 `host.docker.internal` 访问控制面的中转入口。
+
+`deploy/hindsight/compose.yaml` 在 Oryn 源码目录里，命令都在源码根目录执行（检出方法见[安装二进制与镜像](/admin/install/binaries-and-image/)）。
+
+## 生成 .env 并启动 Hindsight
+
+<Steps>
+
+1. 打开「设置 → 记忆」，先选好模型和嵌入接口，再点「生成 .env」，把内容保存为 `deploy/hindsight/.env`。API key 和中转令牌只显示这一次；重新生成后旧值立即失效。
+
+2. 启动服务。首次会构建带 pgvector 的 pgroonga 镜像：
+
+   ```bash
+   docker compose -f deploy/hindsight/compose.yaml up -d
+   ```
+
+3. 在「连接」卡片的「Hindsight 地址」里填 Hindsight 地址（同机为 `http://127.0.0.1:8888`），状态变为「正常」后打开「启用记忆（总开关）」。
+
+</Steps>
+
+`.env` 由管理页生成，不要手写；格式示例见仓库的 [`deploy/hindsight/.env.example`](https://github.com/Lynricsy/Oryn/blob/main/deploy/hindsight/.env.example)。关于它的几点：
+
+- 每种用途（default / retain / reflect / consolidation / mental model）只写一个固定的别名模型和协议类型（openai / anthropic / gemini）。在同一协议内换模型立即生效。换了协议类型时，管理页给出要替换的几行，并提示重启 Hindsight：
+
+  ```bash
+  docker compose -f deploy/hindsight/compose.yaml up -d api
+  ```
+
+  在点「我已重启」之前，该用途的中转一律返回 409。
+- 重排是可选的。管理页没配重排接口时，`.env` 写 `HINDSIGHT_API_RERANKER_PROVIDER=rrf`（Hindsight 自带，只按 RRF 分融合排序，不调用模型）；配了才走 Cohere 兼容中转。之后添加或删除重排接口时，管理页同样给出要改的行，重启 Hindsight 后点「我已重启」。
+- 「我已重启」会把所有待部署的变化（各用途的协议类型和重排模式）一起确认。
+- 中文检索依赖 pgroonga（`HINDSIGHT_API_TEXT_SEARCH_EXTENSION=pgroonga`）。输出语言固定为简体中文。
+- `.env` 固定写 `HINDSIGHT_API_LLM_PROMPT_CACHE_ENABLED=false`，因为中转不放行 gemini 的显式缓存。旧 `.env` 没有这一行时手动补上，再执行上面的 `up -d api`。
+- 打开开关、关闭单个项目、生成 `.env` 之后，正在运行的线程要到下一个会话（或重启之后）才生效。
+
+<Aside type="caution">
+`HINDSIGHT_DB_PASSWORD` 只在数据卷首次初始化时生效，之后改它会导致 API 连不上库。数据库只在 compose 的内部网络里，所以默认值可以接受；要改就在首次 `up` 之前改。
+</Aside>
+
+## 备份与恢复
+
+`hindsight-admin backup` 在一个 `REPEATABLE READ` 事务里导出整个库（bank、document、事实、实体、mental model），得到一个 zip。备份和恢复都只对 `public` schema 生效。下面的 cron 示例每天 3:30 备份，保留 14 份（`/opt/oryn` 是 Oryn 源码目录）：
+
+```text
+30 3 * * * cd /opt/oryn && f=hindsight-$(date +\%F).zip && docker compose -f deploy/hindsight/compose.yaml exec -T api hindsight-admin backup /tmp/$f && docker compose -f deploy/hindsight/compose.yaml cp api:/tmp/$f /var/backups/oryn/ && docker compose -f deploy/hindsight/compose.yaml exec -T api rm -f /tmp/$f && find /var/backups/oryn -name 'hindsight-*.zip' -mtime +14 -delete
+```
+
+也可以直接对库做 `pg_dump`：
+
+```bash
+docker compose -f deploy/hindsight/compose.yaml exec -T db pg_dump -U hindsight_user -Fc hindsight_db > hindsight.dump
+```
+
+恢复会清空目标库：先用 `docker compose cp` 把 zip 放进容器，然后执行 `hindsight-admin restore /tmp/<文件>.zip --yes`，再执行一次 `hindsight-admin repair-bank --all`。
+
+管理页的「导出」是一个只读的 bank 归档，用来在 Oryn 之外查看或迁移，不能代替备份。
+
+## 升级 Hindsight
+
+compose 里的镜像按 digest 固定。Oryn 只对一个小版本（当前是 1.2）做过测试；Hindsight 报告的版本不在这个小版本内时，管理页显示「Hindsight 版本未经验证」。
+
+**补丁升级**（1.2.x → 1.2.y）：先备份，把 `compose.yaml` 里 api 镜像的 digest 换成新补丁的 digest，然后执行：
+
+```bash
+docker compose -f deploy/hindsight/compose.yaml pull api && docker compose -f deploy/hindsight/compose.yaml up -d api
+```
+
+数据库迁移在启动时自动执行；管理页状态回到「正常」即完成。
+
+**小版本升级**（1.2 → 1.3）要等 Oryn 把测试过的小版本更新后再做，逐项检查：
+
+<Steps>
+
+1. 读新版本的 release notes，重点看环境变量的改名或删除（与 `.env` 的键对照）、HTTP API（`/v1/default/banks/{bank}/memories`、`documents`、`mental-models`、`reflect`）的变化，以及标签过滤的语义。
+
+2. 先备份。
+
+3. 升级 Postgres 镜像之前，确认 pgroonga 与 pgvector 的版本仍然兼容。
+
+4. 换镜像后执行数据库迁移，再检查 bank：
+
+   ```bash
+   docker compose -f deploy/hindsight/compose.yaml exec api hindsight-admin run-db-migration
+   docker compose -f deploy/hindsight/compose.yaml exec api hindsight-admin repair-bank --all --dry-run
+   ```
+
+5. 在管理页确认状态正常，在任一项目线程里执行一次 recall 和 retain，并确认两个项目之间互相看不到对方的记忆。
+
+</Steps>
+
+## 换嵌入模型
+
+任何嵌入模型的更换都必须重新嵌入，维度相同也不例外，否则新旧向量混在一起会让召回变差。嵌入「接口地址」换到另一个服务，即便模型名相同，也按换模型处理。
+
+**必须停机迁移。** Oryn 对 Hindsight 只暴露一个嵌入别名，所有请求都经同一个中转；中转一旦切到新模型，仍在运行的 API 和 worker 会立即用新模型生成向量，与库里的旧向量混在一起。迁移期间记忆不可用：Agent 的 recall 会失败并给出提示，自动写入留在各环境与 Runner 的 outbox 里，Hindsight 恢复后补发（outbox 最多保留 7 天）。
+
+bank 里已有记忆时，管理页的嵌入模型与维度只读。只有勾选「换嵌入模型（reembed）」的保存才会被接受，而且控制面会先探测 Hindsight：还能连上时返回 409 `hindsight_running`。
+
+下文 `dc` 代表 `docker compose -f deploy/hindsight/compose.yaml`：
+
+```bash
+alias dc='docker compose -f deploy/hindsight/compose.yaml'
+```
+
+<Steps>
+
+1. 先备份（见上文）。
+
+2. 停 API（worker 跑在同一个容器里，会一起停），Postgres 保持运行：
+
+   ```bash
+   dc stop api
+   ```
+
+3. 在管理页把嵌入接口改成新模型和新维度，勾选「换嵌入模型（reembed）」后保存。
+
+4. 维度有变化时，把 `.env` 里的 `HINDSIGHT_API_EMBEDDINGS_OPENAI_DIMENSIONS` 改成新维度。
+
+5. 用一次性容器执行迁移。它读同一份 `.env` 与数据库地址，不发布端口。每个 schema 显示 `swapped` 即完成；中途中断时重跑同一条命令，会从断点继续。在它完成之前不要启动 API：
+
+   ```bash
+   dc run --rm --no-deps api hindsight-admin reembed --all-schemas
+   ```
+
+6. 启动 API，等管理页状态回到「正常」：
+
+   ```bash
+   dc up -d api
+   ```
+
+7. 解除写保护：
+
+   ```bash
+   dc run --rm --no-deps api hindsight-admin reembed --all-schemas --finish
+   ```
+
+</Steps>
+
+迁移失败、想退回旧模型时：保持 API 停止，把备份目录挂进一次性容器执行恢复，然后把管理页的嵌入改回旧模型（同样要勾选「换嵌入模型（reembed）」），`.env` 的维度也改回旧值，再启动：
+
+```bash
+dc run --rm --no-deps -v /var/backups/oryn:/backups:ro api hindsight-admin restore /backups/<文件>.zip --yes
+```
+
+## 启用主人记忆
+
+主人记忆是全局助手专用的第二个 bank `oryn-owner`，与 Agent 记忆共用同一个 Hindsight、同一把 key 和同一个模型中转，不需要额外部署。前提是 Agent 记忆已经启用并连上（状态「正常」）；否则「助手记忆」分区只显示提示。
+
+在「设置 → 记忆」的「助手记忆」里打开开关，填写你的名字与别名。它们写进 bank 的抽取说明，抽取时统一写成“主人”；别名填不全时，同一个人会被拆成两个实体。首次开启回填最近 30 天内有活动的对话与线程，进度显示在状态卡里。
+
+`recall_memory` 先在 Hindsight 召回前 50 条，再交给判断模型逐条打分。默认用 Google Gemini Decisions API 的 `gemini-decision-1`（地址 `https://generativelanguage.googleapis.com`），key 只写不读。没有配置、超时或返回 429 时，退回 Hindsight 的原始排序并标注为未经重排，召回不会因此失败。
+
+写入的时机、内容与主题整理见[主人记忆](/guide/assistant/owner-memory/)。24 小时与 7 天的用量在状态卡里显示。下表是一次实测的成本（2026-11-17 用 16 天的真实会话测得，抽取与主题模型为 `gemini-3.5-flash-lite`，按 token 计）：
+
+| 环节 | 实测 |
+|---|---|
+| 回填 79 个会话（117 个文档、453 条记忆）：写入 + 整理 | 约 135 万 token |
+| 首次主题整理：一次 reflect + 9 个主题全量生成 | 约 293 万 token |
+| 之后的日常 | 只刷新有新事实的主题，同一主题间隔不少于 20 小时，主人画像主题每周至少刷新一次 |
+| 每次 `recall_memory` 的判断模型重排（50 条候选） | 按发布价约 $0.0008 |
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 经过测试的 Hindsight 小版本 | 1.2 |
+| API 缺省发布地址 | `127.0.0.1:8888` |
+| 迁移期间 outbox 保留 | 最多 7 天 |
+| cron 示例保留的备份 | 14 份 |
+| 主人记忆首次回填 | 最近 30 天 |
+| 召回候选数 | 50 条 |
+
+## 相关
+
+- [记忆](/guide/agent/memory/)
+- [主人记忆](/guide/assistant/owner-memory/)
+- [备份](/admin/operations/backup/)
+- [升级](/admin/operations/upgrade/)

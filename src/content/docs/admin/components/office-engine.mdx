@@ -1,0 +1,181 @@
+---
+title: Office 引擎（Collabora）
+description: 部署 Collabora Online，让 Word、Excel、PowerPoint Artifact 可以在浏览器里编辑，并改由引擎做格式转换与 PDF 导出。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '### Office 引擎（M32）'
+  - file: deploy/collabora/compose.yaml
+  - file: deploy/openresty/oryn-office.conf
+verified: 6fe0baf13191
+sidebar:
+  order: 5
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Office 引擎是可选组件。部署 Collabora Online（CODE）后：
+
+- Word / Excel / PowerPoint Artifact 可以在浏览器里所见即所得编辑；
+- 旧版与 OpenDocument 文件（`.doc .xls .ppt .odt .ods .odp`）导入时自动转成 OOXML；
+- Word / Excel / PowerPoint 的 PDF 导出改由引擎高保真转换，不受内置打印 64 MiB 的上限约束。
+
+不部署时，编辑按钮不出现，旧版格式导入回 `unsupported_format`，Excel 的 PDF 导出提示「需要 Office 引擎」。你在界面里怎样使用这些文件，见 [Word、Excel、PowerPoint 与 PDF](/guide/artifacts/office/)。
+
+## 准备独立域名与证书
+
+引擎用一个独立的域名对浏览器提供服务，下文以 `office.example.com` 为例。为它添加 DNS 记录并申请证书，方式与主域名相同（见[反向代理与 HTTPS](/admin/install/reverse-proxy/)）。
+
+需要满足两条连通性：浏览器必须能访问引擎的 `url`；引擎必须能访问控制面的 WOPI 回调地址 `wopi_base`（缺省为 `public_url`）。
+
+## 启动引擎
+
+<Steps>
+
+1. 在 Oryn 源码目录的 `deploy/collabora/` 下写 `.env`（或在 shell 里导出）：
+
+   ```bash
+   ORYN_PUBLIC_URL=https://oryn.example.com   # 引擎回调的 Oryn 源：配置了 artifacts.office.wopi_base 时写它，否则写 public_url
+   OFFICE_HOST=office.example.com             # 浏览器访问引擎的主机名（artifacts.office.url 去掉 https://）
+   ```
+
+2. 启动：
+
+   ```bash
+   docker compose -f deploy/collabora/compose.yaml up -d
+   ```
+
+</Steps>
+
+`deploy/collabora/compose.yaml` 的内容如下（省略了文件头的说明注释）：
+
+```yaml
+name: oryn-collabora
+
+services:
+  code:
+    image: collabora/code@sha256:a2f5d4e88addd46033d8440f7a13b82f7e6fe444bf8c6b5a3eadc789f0b5342b
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9980:9980"
+    environment:
+      aliasgroup1: ${ORYN_PUBLIC_URL:?需要 ORYN_PUBLIC_URL}
+      server_name: ${OFFICE_HOST:?需要 OFFICE_HOST}
+      dictionaries: "en_US zh_CN"
+      extra_params: >-
+        --o:ssl.enable=false
+        --o:ssl.termination=true
+        --o:net.post_allow.host[0]=127\.0\.0\.1
+        --o:net.post_allow.host[1]=172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+
+        --o:security.enable_macros_execution=false
+        --o:admin_console.enable=false
+```
+
+- 引擎只发布在 `127.0.0.1:9980`，浏览器经反代访问，TLS 在反代终结（`ssl.enable=false` 加 `ssl.termination=true`）。
+- `aliasgroup1` 是允许的 WOPI 宿主：引擎只回调这个源的 `/wopi/files/…`。
+- `net.post_allow` 只放行本机与 docker 网桥调用转换接口；控制面经 `internal_url` 的请求从网桥地址到达。
+- 宏一律不执行，管理控制台关闭。
+- 镜像按 digest 固定。
+
+## 配置反代
+
+把 [`deploy/openresty/oryn-office.conf`](https://github.com/Lynricsy/Oryn/blob/main/deploy/openresty/oryn-office.conf) 放进与 `oryn.conf` 同一个 http 块（它复用 `oryn.conf` 里的 `$oryn_connection_upgrade`），把 `office.example.com` 换成实际域名并配好证书路径：
+
+```nginx
+# 和 oryn.conf 放在同一个 http 块里（复用其中的 $oryn_connection_upgrade），
+# 把 office.example.com 换成实际域名（orynd.yaml 的 artifacts.office.url）。
+# 引擎见 deploy/collabora/compose.yaml（只发布在 127.0.0.1:9980）。
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name office.example.com;
+
+    ssl_certificate     /www/sites/office.example.com/ssl/fullchain.pem;
+    ssl_certificate_key /www/sites/office.example.com/ssl/privkey.pem;
+
+    # 编辑器里插入图片、打开大文件（文件本身经 WOPI 由引擎直接从 orynd 取，不经这里）
+    client_max_body_size 300m;
+
+    # 编辑器的 WebSocket 路径里带着编码后的 WOPISrc 与 access_token（写令牌），$request 与 $uri 都会把它记下，
+    # 所以整个引擎虚拟主机不记访问日志
+    access_log off;
+
+    # 转换接口只给控制面（orynd 经 internal_url 直连 127.0.0.1:9980），不从公网开放
+    location ~ ^/(cool|lool)/convert-to {
+        return 403;
+    }
+
+    # 编辑器的 WebSocket（/cool/<WOPISrc>/ws）与其余静态资源、discovery 都走这里
+    location / {
+        proxy_pass http://127.0.0.1:9980;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $oryn_connection_upgrade;
+        proxy_read_timeout 36000s;
+        proxy_send_timeout 36000s;
+        proxy_buffering off;
+    }
+}
+
+server {
+    listen 80;
+    server_name office.example.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+主域名的 `/wopi/` 也必须关掉访问日志，示例 `oryn.conf` 已包含，见[反向代理与 HTTPS](/admin/install/reverse-proxy/)。
+
+<Aside type="caution">
+编辑会话的访问令牌在引擎回调里以查询串 `access_token` 出现，编辑器 WebSocket 的路径里也带着它；默认 CODE 镜像不签名回调时，它就是对文档的写凭证。不要让任何一层把它写进日志：主域名的 `/wopi/` 与整个引擎虚拟主机都要关掉访问日志，你自己另加的日志、监控或 WAF 也要排除这两处。
+</Aside>
+
+## 配置控制面
+
+在 `orynd.yaml` 里加上 `artifacts.office`，然后重启 `orynd`：
+
+```yaml
+artifacts:
+  office:
+    url: "https://office.example.com"        # 浏览器访问引擎的地址；空（缺省）= 不启用
+    internal_url: "http://127.0.0.1:9980"    # 控制面访问引擎（discovery、能力、转换）；空 = 同 url
+    wopi_base: ""                            # 引擎回调控制面 WOPI 端点的地址；空 = public_url
+```
+
+三个地址都必须是不带路径与查询的 http(s) 绝对地址，否则 `orynd` 拒绝启动，错误以 `artifacts.office.` 开头。只写 `internal_url` 或 `wopi_base` 而不写 `url` 同样报错。配置了 `url` 时，主站 CSP 的 `frame-src` 与 `form-action` 会追加这个源（编辑器 iframe 与令牌表单）。键的完整说明见 [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/)。
+
+## 确认引擎已接通
+
+`GET /api/v1/artifacts/capabilities` 返回的 `office.edit` 与 `office.convert` 都为 `true` 即接通。不可用时 `office.reason` 给出原因。discovery 与能力结果缓存 10 分钟，失败结果缓存 30 秒，所以改完配置后可能要等缓存过期才看到变化。
+
+## 了解编辑会话的行为
+
+- 引擎经 `<wopi_base>/wopi/files/<artifact id>` 回调控制面，不经登录 Cookie，凭 32 字节随机访问令牌；库里只存令牌的哈希，令牌 12 小时过期。discovery 里有 `proof-key` 时，控制面校验每个回调的 `X-WOPI-Proof`；默认 CODE 镜像不发签名，这时只凭令牌并记一条日志。
+- 版本只在显式保存、退出编辑器、会话过期三个时刻且内容有变时落下，作者是你；引擎每 30 秒的自动保存只更新工作副本。
+- 编辑期间，这个 Artifact 的其他写入（Agent 更新、恢复版本、上传新版本）回 423 `locked`。关闭编辑器后宽限 30 秒等引擎的退出保存；最后一次活动 30 分钟后占用也会过期。释放时工作副本与最新版本不同，就落一个备注为 `编辑器自动保存` 的版本。控制面每 15 秒清扫一次占用，启动时先清扫一轮。
+- 去掉 `artifacts.office` 重启后，遗留的占用照常按上面的规则释放。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 引擎发布地址 | `127.0.0.1:9980` |
+| 反代请求体上限 | `300m` |
+| 编辑会话访问令牌有效期 | 12 小时 |
+| 引擎自动保存间隔 | 30 秒 |
+| 关闭编辑器后的宽限 | 30 秒 |
+| 无活动后占用过期 | 30 分钟 |
+| 占用清扫间隔 | 15 秒 |
+| 能力缓存 | 成功 10 分钟，失败 30 秒 |
+| 不部署引擎时内置打印导出 PDF 的上限 | 64 MiB |
+
+## 相关
+
+- [Word、Excel、PowerPoint 与 PDF](/guide/artifacts/office/)
+- [反向代理与 HTTPS](/admin/install/reverse-proxy/)
+- [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/)

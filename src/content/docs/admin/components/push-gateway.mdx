@@ -1,0 +1,225 @@
+---
+title: 移动推送与自建推送网关
+description: 了解控制面向手机发推送的两条路径，判断是否需要自建推送网关，以及自建网关的构建、配置、运行、反代与备份。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '### 移动 App 推送'
+  - file: docs/push-gateway.md
+    section: '# 推送网关（oryn-push-gateway）'
+  - file: docs/push-gateway.md
+    section: '## 构建'
+  - file: docs/push-gateway.md
+    section: '## 配置'
+  - file: docs/push-gateway.md
+    section: '## 安装与 systemd'
+  - file: docs/push-gateway.md
+    section: '## 反代（OpenResty）'
+  - file: docs/push-gateway.md
+    section: '## 备份'
+  - file: docs/push-gateway.md
+    section: '## APNs key'
+  - file: docs/push-gateway.md
+    section: '## Firebase 服务账号'
+  - file: docs/push-gateway.md
+    section: '## 自建网关'
+verified: 6fe0baf13191
+sidebar:
+  order: 6
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+控制面向手机发推送只有两条路径：
+
+- **Web Push**，含 Android 的 UnifiedPush（`foss` 包；`gms` 包可在设置里手动切换）：手机上装 ntfy 等分发器，服务端不需要任何配置。
+- **官方推送网关**：iOS 的 APNs 与 Android `gms` 包默认的 FCM 走这条路。控制面把 RFC 8291 端到端加密的密文交给网关，网关转给 APNs / FCM。网关只见密文，解不开载荷；APNs key 与 Firebase 服务账号只放在网关上。
+
+多数部署使用缺省的官方网关，不需要做任何事。只有自己编 App（换了 bundle id、Firebase 项目或 APNs 团队）时才需要自建网关。手机上怎样开启推送，见[手机推送](/guide/clients/push/)。
+
+## 使用官方网关
+
+`orynd.yaml` 的 `push.gateway.url` 缺省为 `https://push.oryn.best`，开箱即用：
+
+```yaml
+push: { gateway: { url: "https://push.oryn.best" } }
+```
+
+- 只能写不带路径的 origin：`https://…`，或回环主机的 `http://…`（本机调试用，例如 `http://localhost:7700`）。
+- 写空串 `""` 关闭网关。此时 App 提示服务器关闭了官方推送网关，Web Push 与 UnifiedPush 照常。
+- 启用网关时，控制面在启动期生成主机签名密钥 `<data_dir>/push-gateway.key`（Ed25519 种子，0600），网关凭它识别本实例。备份 `data_dir` 时一并保留；删掉它等于轮换，全部网关订阅失效，App 下次进入时自动重新授权。
+- 只有手机登记了网关订阅时，控制面才会访问网关；没开推送的实例不产生任何对外流量。
+- 出站需要能访问网关 origin 的 443 端口。
+
+## 判断是否需要自建网关
+
+官方签名的 iOS 包与 `gms` 包连任意自部署的控制面时，都经官方网关收推送。自己编 App 时，官方网关不服务你的 App，需要按本页余下各节自建，再让 App 与控制面都指向它（见[让 App 与控制面指向自建网关](#让-app-与控制面指向自建网关)）。
+
+## 取得网关二进制
+
+二选一：
+
+- 用 GitHub Release 的 `oryn-server_<版本>_linux-{x64,arm64}.tar.gz`，里面带 `oryn-push-gateway`（见[安装二进制与镜像](/admin/install/binaries-and-image/)）。
+- 从源码构建，产出 `bin/oryn-push-gateway`（与 `orynd` 同一套 ldflags，静态链接）：
+
+  ```bash
+  make build
+  ./bin/oryn-push-gateway -version
+  ```
+
+命令行只有两个参数：`-config`（缺省 `/etc/oryn-push-gateway/gateway.yaml`）与 `-version`，见 [`oryn-push-gateway` 参考](/reference/cli/oryn-push-gateway/)。
+
+## 写网关配置
+
+配置文件按 YAML 严格解析，未知键启动报错。下面的示例里，`<…>` 换成你自己的值：
+
+```yaml
+listen: "127.0.0.1:7700"                     # 只监听回环，由反代终止 TLS
+public_origin: "https://push.example.com"    # 客户端看到的 origin：https，或回环主机的 http；不带路径。签名覆盖它
+data_dir: "/var/lib/oryn-push-gateway"       # master.key 与 gateway.db
+log_level: "info"                            # debug / info / warn / error
+
+apns:                                        # key_file 为空 = 不提供 APNs（/v1/info 不报 apns）
+  key_file: "/etc/oryn-push-gateway/apns.p8" # AuthKey_<KeyID>.p8
+  key_id: "<KeyID>"
+  team_id: "<Team ID>"
+  topic: "<App 的 bundle id>"
+  environments: ["production", "sandbox"]    # 缺省两者都接受；TestFlight / App Store 包是 production，Xcode 调试包是 sandbox
+
+fcm:                                         # service_account_file 为空 = 不提供 FCM（/v1/info 不报 fcm）
+  service_account_file: "/etc/oryn-push-gateway/fcm.json"
+  app_id: "<Android 包名>"
+
+limits:                                      # 以下为缺省值，可整段省略
+  grant_per_minute: 60                       # 每个授权每分钟
+  grant_per_day: 2000                        # 每个授权每天
+  host_per_minute: 600                       # 每个主机公钥（每台 orynd）每分钟
+  challenges_per_ip_hour: 30                 # 每个来源 IP 每小时的 POST /v1/challenges
+```
+
+只写 `listen`、`public_origin`、`data_dir` 也能启动：两个通道都不提供，`/v1/info` 返回 `{"v":1}`，适合先验证部署链路。全部键见 [`gateway.yaml` 配置参考](/reference/config/push-gateway-yaml/)。
+
+`data_dir` 里有两样东西：
+
+- `master.key`：32 字节主密钥（0600，首次启动生成），以 AES-256-GCM 静态加密授权表里的推送令牌。
+- `gateway.db`：SQLite 授权表（WAL 模式，旁边会有 `-wal` / `-shm`）。只存授权（设备公钥、主机公钥、通道、App 标识、环境、加密后的推送令牌、时间），不存任何通知内容，也不存控制面的地址。90 天未用的授权与吊销满 7 天的授权每小时清理一次。
+
+网关日志只记路由、HTTP 结果、授权 id、主机公钥哈希前 8 位与上游错误码，不记推送令牌、nonce、`e`、来源 IP 与其它请求内容。
+
+## 安装并用 systemd 运行
+
+先按二进制的来源设定 `GW_BIN` 与 `GW_UNIT`：
+
+```bash
+# Release 包：解包后在 oryn-server_<版本>_linux-x64/ 目录里执行
+GW_BIN=oryn-push-gateway GW_UNIT=oryn-push-gateway.service
+# 从源码：仓库根目录 make build 之后执行
+GW_BIN=bin/oryn-push-gateway GW_UNIT=deploy/systemd/oryn-push-gateway.service
+```
+
+然后安装二进制、配置、凭据与 systemd 单元：
+
+```bash
+sudo install -m 0755 "$GW_BIN" /usr/local/bin/oryn-push-gateway
+sudo useradd --system --home /var/lib/oryn-push-gateway --shell /usr/sbin/nologin oryn-push
+sudo install -d -m 0750 -o root -g oryn-push /etc/oryn-push-gateway
+sudo install -m 0640 -o root -g oryn-push gateway.yaml /etc/oryn-push-gateway/gateway.yaml
+# 凭据（见下文「申请 APNs key」「生成 Firebase 服务账号」）
+sudo install -m 0640 -o root -g oryn-push AuthKey_<KeyID>.p8 /etc/oryn-push-gateway/apns.p8
+sudo install -m 0640 -o root -g oryn-push fcm-service-account.json /etc/oryn-push-gateway/fcm.json
+
+sudo install -m 0644 "$GW_UNIT" /etc/systemd/system/oryn-push-gateway.service
+sudo systemctl daemon-reload && sudo systemctl enable --now oryn-push-gateway
+journalctl -u oryn-push-gateway -f
+```
+
+单元以 `oryn-push` 用户运行，`StateDirectory` 自动建好 `/var/lib/oryn-push-gateway`（0700）。改配置或换凭据后执行 `systemctl restart oryn-push-gateway`。
+
+## 配置反代
+
+照仓库的 [`deploy/openresty/oryn-push-gateway.conf`](https://github.com/Lynricsy/Oryn/blob/main/deploy/openresty/oryn-push-gateway.conf)：TLS 终止在反代，`proxy_pass http://127.0.0.1:7700`。
+
+- **必须传 `X-Real-IP $remote_addr`。** 网关只在请求来自回环地址（即本机反代）时采信 `X-Real-IP` / `X-Forwarded-For`，用它做每 IP 的 challenge 限流；不传则所有手机共用反代的回环地址，一起被限流。因此网关必须只监听回环、只经本机反代对外。
+- 不要改写路径、不要加查询串：签名覆盖 `public_origin` 加路径，带查询串的请求一律 400。
+- `public_origin` 必须与手机、控制面访问的 origin 逐字一致，无尾斜杠。
+
+## 备份网关数据
+
+备份 `data_dir` 下的 `master.key` 与 `gateway.db`，两者缺一不可：没有 `master.key` 解不开库里的令牌。在线备份用下面的命令，或停服务后连同 `-wal` 一起拷贝：
+
+```bash
+sqlite3 gateway.db ".backup gateway.bak"
+```
+
+丢了它们的后果有限：所有授权失效，控制面下一次投递收到 410 后删除订阅，App 下次同步时重新授权。期间不发推送。
+
+## 申请 APNs key
+
+需要 Apple Developer 账号的 Account Holder 或 Admin 角色；看不到 Keys 入口说明账号不是这两种角色。
+
+<Steps>
+
+1. 打开 Apple Developer → Certificates, IDs & Profiles → Keys → 加号（+）。
+
+2. 填名字，勾选 **Apple Push Notifications service (APNs)**，点 Configure，环境选 **Sandbox & Production**，保存后 Continue → Register。
+
+3. 下载 `AuthKey_<KeyID>.p8`。记下 Key ID（文件名里那串，也显示在 key 详情页）。
+
+4. 在 Membership details 页查到你的 Team ID。
+
+5. 把 `.p8` 放到 `/etc/oryn-push-gateway/apns.p8`（`root:oryn-push`，0640），配置里填 `key_file`、`key_id`、`team_id` 与 `topic`（你的 App 的 bundle id）。这个 App ID 要开启 Push Notifications。
+
+</Steps>
+
+<Aside type="caution">
+`.p8` 文件只能下载一次，丢了只能吊销重建。
+</Aside>
+
+不配 APNs 时 `/v1/info` 没有 `apns`，iOS App 的推送卡片显示 `gateway_app_mismatch`。
+
+## 生成 Firebase 服务账号
+
+在 Firebase 控制台 → 项目设置 → 服务账号 → 生成新的私钥，得到服务账号 JSON。它必须与 `gms` 包的 `google-services.json` 属于同一个项目。把它放到 `/etc/oryn-push-gateway/fcm.json`（`root:oryn-push`，0640），配置里填 `service_account_file` 与 `app_id`（Android 包名）。`/v1/info` 的 `fcm.projectId` 取自这份 JSON 的 `project_id`。
+
+不配 FCM 时 `/v1/info` 没有 `fcm`，`gms` 包显示 `gateway_app_mismatch`。
+
+## 让 App 与控制面指向自建网关
+
+<Steps>
+
+1. 按上文部署网关，`apns.topic` / `fcm.app_id` 与凭据换成你自己的。
+
+2. 重编 App 时，用编译期环境变量 `ORYN_PUSH_GATEWAYS` 写入你的网关 origin（逗号分隔，可多个；缺省只有 `https://push.oryn.best`）：
+
+   ```bash
+   cd web && ORYN_PUSH_GATEWAYS=https://push.example.com bun run tauri android build
+   ```
+
+   App 只向这份列表里的 origin 发请求：控制面给出的网关不在列表里时，推送卡片显示 `gateway_untrusted`。
+
+3. 把控制面 `orynd.yaml` 的 `push.gateway.url` 改成同一个 origin。
+
+</Steps>
+
+本机联调可以用回环 http：`public_origin: http://localhost:7700`、`ORYN_PUSH_GATEWAYS=http://localhost:7700`。
+
+## 限制
+
+| 项 | 缺省值 |
+|---|---|
+| 每个授权每分钟 | 60 |
+| 每个授权每天 | 2000 |
+| 每台控制面（主机公钥）每分钟 | 600 |
+| 每个来源 IP 每小时的 challenge | 30 |
+| 未使用授权的清理 | 90 天 |
+| 已吊销授权的清理 | 吊销满 7 天 |
+| 控制面访问网关的出站端口 | 443 |
+
+## 相关
+
+- [手机推送](/guide/clients/push/)
+- [Android App](/guide/clients/android/)
+- [iOS App](/guide/clients/ios/)
+- [备份](/admin/operations/backup/)
+- [`oryn-push-gateway` 参考](/reference/cli/oryn-push-gateway/)
+- [`gateway.yaml` 配置参考](/reference/config/push-gateway-yaml/)

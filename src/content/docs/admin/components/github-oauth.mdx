@@ -1,0 +1,140 @@
+---
+title: GitHub 集成：注册 OAuth App
+description: 注册你自己的 GitHub OAuth App，连接「我的账号」与「Agent 账号」，并处理组织限制、SAML SSO 与 webhook 投递。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 13. GitHub 集成（M15）'
+  - file: docs/deploy.md
+    section: '### 注册 OAuth App'
+  - file: docs/deploy.md
+    section: '### Scope'
+  - file: docs/deploy.md
+    section: '### 组织批准与 SAML SSO'
+  - file: docs/deploy.md
+    section: '### 事件来源与额度'
+  - file: web/src/i18n/locales/zh-CN.json
+verified: 6fe0baf13191
+sidebar:
+  order: 3
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+Oryn 通过你自己注册的 GitHub OAuth App 连接 GitHub，用它连接两个 GitHub 用户：
+
+- **我的账号**：交互式线程、首屏新建线程、项目表单里的仓库列表、仓库绑定、仓库 webhook 的管理、仓库级轮询与发布哨兵的读请求都用它。
+- **Agent 账号**（可选，但全自动线程默认用它）：专门给 Agent 用的第二个真实 GitHub 账号。两个槽位不能是同一个账号。
+
+OAuth App 的 Client Secret、两个账号的访问令牌与刷新令牌、每个仓库 webhook 的 secret 都用控制面主密钥加密后存在数据库里，不出现在「密钥」设置页，也不进执行环境（orb）。
+
+`orynd.yaml` 里的 `github` 段只有两个地址，缺省值如下，只有测试会改：
+
+```yaml
+github: { api_url: "https://api.github.com", web_url: "https://github.com" }
+```
+
+## 注册 OAuth App
+
+在「设置 → Git 与 GitHub」的「OAuth App」卡片里操作。
+
+<Steps>
+
+1. 点「在 GitHub 上新建 OAuth App」，打开 GitHub 的新建页面（`<web_url>/settings/applications/new`）。Homepage URL 随意填写。
+
+2. **Authorization callback URL** 填卡片上显示的回调地址，可以点「复制回调地址」。它的形式是：
+
+   ```text
+   https://oryn.example.com/api/v1/public/github/oauth/callback
+   ```
+
+   其中 `https://oryn.example.com` 是你的 `public_url`。没保存过配置时，卡片上也显示这个地址。
+
+3. 在 GitHub 上生成 Client secret，把 **Client ID** 和 **Client Secret** 填回卡片并保存。之后再改 Client ID 或 webhook 基址时，Secret 留空表示沿用已保存的值。
+
+4. 确认「Webhook 基址」。它默认等于 `public_url`，仓库 webhook 的投递地址是 `<webhook 基址>/api/v1/public/github/webhook`。改动基址后，Oryn 立刻重写所有仓库 webhook 的投递地址，失败只记日志，之后每 10 分钟的同步还会再重写一遍。
+
+</Steps>
+
+没有 OAuth App 配置时，连接账号返回 409 `github_not_configured`。
+
+## 连接我的账号与 Agent 账号
+
+在「GitHub 账号」卡片里分别对「我的账号」与「Agent 账号」点「连接」。
+
+- 授权链接 10 分钟内有效，带 `prompt=select_account`。可以点「复制链接」，在已登录目标 GitHub 账号的另一个浏览器里打开。
+- 回调完成后跳回 `<public_url>/settings/git?connected=<slot>`；失败时是 `?error=<code>`，`code` 取 `state_invalid`、`exchange_failed`、`same_account`、`access_denied`、`github_not_configured` 之一。
+
+两个账号在线程里怎样使用、全自动线程用哪个身份，见 [GitHub：仓库绑定、PR 与回流](/guide/automation/github/)与 [GitHub 自动化](/guide/automation/github-automation/)。
+
+## 核对授予的 scope
+
+授权请求的 `scope` 恰好是 `repo workflow read:org admin:repo_hook gist write:packages user:email`。实际授予的 scope 取自 `GET /user` 的 `X-OAuth-Scopes`，「GitHub 账号」卡片会列出来。缺项时卡片显示「缺少权限」和缺少的 scope，这时需要重新连接。判断是否缺项时，`write:org`、`admin:org` 视为包含 `read:org`，`user` 视为包含 `user:email`。
+
+| scope | 用途 |
+|---|---|
+| `repo` | 公开与私有仓库的读写：git 克隆与推送、issue、PR、评审、评论、标签、Release、合并，以及控制面的仓库绑定、权限查询、CI 汇总与轮询 |
+| `workflow` | 推送改动了 `.github/workflows/` 的提交。没有它，GitHub 会拒绝这类推送，发布哨兵修 CI 时尤其需要 |
+| `read:org` | 读组织与团队的成员关系，例如 `gh` 按团队请求评审、列出组织仓库 |
+| `admin:repo_hook` | 创建、校正、删除仓库 webhook，读取投递日志。实测只有 `repo` 也能做到，单列出来是为了不依赖这一隐含行为 |
+| `gist` | `gh gist` 经 API 创建和编辑 gist。经 git 克隆 gist（`gist.github.com`）不支持 |
+| `write:packages` | 只用于经 `gh api` 调用的 Packages REST API |
+| `user:email` | 读取账号邮箱（`GET /user/emails`） |
+
+GitHub 2026-08-14 起新建的 OAuth App 默认签发 8 小时过期的访问令牌与 6 个月有效期的刷新令牌；关闭过期的旧 App 不返回过期时间与刷新令牌。持有刷新令牌的槽位在距离到期 5 分钟内自动轮换，未到窗口却遇到 401 时也先尝试刷新。只有刷新令牌失效（如 `bad_refresh_token`）、刷新后仍 401，或没有刷新令牌的槽位收到 401 时，该槽位才标为「需要重新授权」，此时在设置页重新连接。
+
+## 处理组织限制与 SAML SSO
+
+新建的组织默认开启 OAuth App 访问限制（OAuth App access restrictions）。没被组织批准的 OAuth App 读不到该组织的私有资源，对公开资源也不能做 privileged 的创建、更新、删除，私有仓库的 webhook 也收不到投递。开启 SAML SSO 的组织另外要求为令牌做 SSO 授权。
+
+Oryn 按 403 响应区分这两种情况：
+
+| 状态 | 判定 | 出现的位置 | 界面给出的操作 |
+|---|---|---|---|
+| `org_restricted` | 403，message 含 `OAuth App access restrictions` | 项目的未绑定原因、仓库 webhook 状态 | 「申请组织批准」：`<web_url>/settings/connections/applications/<client_id>` |
+| `sso_required` | 403，且带 `X-GitHub-SSO` 响应头 | 同上 | 「完成 SSO 授权」：响应头 `X-GitHub-SSO: required; url=…` 里的地址 |
+
+项目未绑定的第三种原因是 `not_found`：仓库不存在，或我的账号读不到它。
+
+组织批准或完成 SSO 授权之后，下一轮同步（每 10 分钟，依次重新绑定项目、校正仓库 webhook）会自动恢复。也可以重新连接我的账号，连接完成后会立即重新绑定全部项目。
+
+开启访问限制的组织里，非成员在公开仓库发评论、开 PR 是否受影响，未经实测。
+
+## 让事件回到 Oryn：webhook 与轮询
+
+三种来源合成同一种内部事件，后续处理完全相同。同一个投递 guid 只处理一次；投递记录与载荷保留 7 天，期间可以用 `oryn github replay <delivery-guid>` 重放已经处理完的投递（见 [`oryn github`](/reference/cli/github/)）。
+
+| 来源 | 何时使用 | 做法 | 额度 |
+|---|---|---|---|
+| `webhook` | 已绑定的仓库，且我的账号是该仓库 admin | Oryn 在仓库上建一个 webhook（`content_type=json`，每个 hook 独立的 secret），订阅 `issues`、`issue_comment`、`pull_request`、`pull_request_review`、`pull_request_review_comment`、`check_suite`、`status`、`workflow_run`、`repository`、`push`。入口校验 `X-Hub-Signature-256`，并要求 `X-GitHub-Hook-Installation-Target-ID` 等于仓库 id，任一项不符回 401。请求体上限 25 MiB，超过回 413。每 10 分钟全量校正一次，同 URL 的已有 hook 会被接管 | 不占 API 额度 |
+| `poll` | 有 `active` webhook 的仓库 | 每 30 秒读一次该 hook 的投递日志；最近 10 分钟收到过实时投递时放宽到 5 分钟。GitHub 访问不到 webhook 地址时，投递照样记进日志，靠这条路补齐 | 单独计额：500 次/小时，列表与详情各计 1 次；返回 304 时不计数；剩余低于 50 时暂停到额度重置 |
+| `rest` | 没有 `active` webhook 的情况（`no_admin`、`org_restricted` 等） | 仓库级：已绑定、有启用规则的仓库，每 60 秒用我的账号读 issue、评论与已完成的 push 工作流运行。对象级：线程关联的 issue 与 PR，每 60 秒读本体、评论、评审、行内评论与 CI 状态。请求都带 ETag，304 不产生事件。对象进入终态满 24 小时后不再轮询 | 按槽位记核心额度：剩余低于 500 时该槽位的轮询间隔加倍，耗尽时暂停到额度重置 |
+
+「仓库 webhook」卡片按仓库列出状态（`active` / `no_admin` / `org_restricted` / `sso_required` / `error`）和最近一次投递，来源显示为「实时」或「轮询」。GitHub 拒绝创建或改写 webhook 时状态为 `error`，GitHub 的报错显示在列表里，下一轮同步会重试。
+
+如果是 GitHub 不接受 webhook 地址，就在「Webhook 基址」里改填一个语法合法的公网地址：投递即使失败也会进日志，轮询照常取回。
+
+## 删除配置
+
+「OAuth App」卡片的「删除配置」先删除 Oryn 在各仓库建的 webhook，再断开两个账号，最后删掉配置行。GitHub 上的 OAuth App 本身不会被删除。
+
+单独断开「我的账号」时，同样先删除全部仓库 webhook，因为这些 webhook 由我的账号管理。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 授权链接有效期 | 10 分钟 |
+| 同步与 webhook 校正间隔 | 10 分钟 |
+| webhook 请求体上限 | 25 MiB |
+| 投递记录与载荷保留 | 7 天 |
+| 投递日志轮询 | 每 30 秒；近 10 分钟有实时投递时每 5 分钟；500 次/小时 |
+| REST 轮询 | 每 60 秒；对象进入终态满 24 小时后停止 |
+| 访问令牌 / 刷新令牌有效期（2026-08-14 起新建的 App） | 8 小时 / 6 个月 |
+
+## 相关
+
+- [GitHub：仓库绑定、PR 与回流](/guide/automation/github/)
+- [GitHub 自动化：触发规则、门禁与发布哨兵](/guide/automation/github-automation/)
+- [Git 访问范围与门禁](/security/git-scope/)
+- [`oryn github` 命令参考](/reference/cli/github/)

@@ -1,0 +1,186 @@
+---
+title: 协调宿主：启用全局助手与 Space
+description: 在控制面主机上安装钉定版本的 omp、配置 coordinator 段，并确认内核与权限满足协调沙箱的启动条件。
+type: how-to
+sources:
+  - file: docs/deploy.md
+    section: '## 8. 协调宿主（Space 与全局助手）'
+  - file: docs/deploy.md
+    section: '### 安装 omp'
+  - file: docs/deploy.md
+    section: '### 配置'
+  - file: docs/deploy.md
+    section: '### 专用账号（root 部署）'
+  - file: docs/deploy.md
+    section: '### 启动条件'
+  - file: docs/deploy.md
+    section: '### 沙箱里有什么'
+  - file: docs/deploy.md
+    section: '### 不同环境得到的隔离'
+  - file: docs/deploy.md
+    section: '### 排查'
+  - file: docs/deploy.md
+    section: '### 升级'
+    under: '## 8. 协调宿主（Space 与全局助手）'
+verified: 6fe0baf13191
+sidebar:
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+全局助手与 Space 协调者的 Agent 不在执行环境（orb）里运行，而是在控制面这台机器上运行：控制面内置一个名为 `@host` 的 Provider（Provider 列表里看不到），需要时拉起子进程 `orynd coordinator-host`。子进程先把自己关进操作系统沙箱，再以协调档启动 omp，每个协调对话一个进程。子进程唯一的对外通道是控制面交给它的 socketpair；模型请求经它内部的代理端口回到控制面，由控制面注入真实密钥，协调 Agent 拿不到任何密钥。
+
+不做本页的配置，或启动条件不满足时，建 Space、开助手对话会失败，其它功能照常。
+
+## 安装 omp
+
+协调宿主用的 omp 与环境镜像是同一份发布产物。在与控制面同版本的 Oryn 源码目录里执行（检出方法见[安装二进制与镜像](/admin/install/binaries-and-image/)）：
+
+```bash
+scripts/fetch-core.sh x64
+sudo install -D -m 0755 build/core/x64/omp /usr/local/lib/oryn/omp
+```
+
+`scripts/fetch-core.sh` 按 `core/source.json` 校验后把 omp 放在 `build/core/<arch>/omp`。安装位置不放 `/usr/local/bin`，免得与主机上你自己用的 `omp` 互相遮蔽。
+
+控制面启动时，以及每次拉起协调宿主前，都会核对 omp 的 sha256 与编进 `orynd` 的 `core/source.json` 是否一致。不一致时协调功能不可用，原因写在日志与 `GET /api/v1/coordinator` 里（`omp at … does not match core/source.json`），普通线程不受影响。本地改过 Core、确实要用自己的构建时，设 `coordinator.verify_omp: false`。
+
+## 配置 coordinator 段
+
+`orynd.yaml` 的 `coordinator` 段全部可省，下面是缺省值：
+
+```yaml
+coordinator:
+  omp_path: "/usr/local/lib/oryn/omp"   # 缺省值
+  dir: ""                               # 缺省 <data_dir>/coordinator：omp 副本、各协调 orb 的 HOME、host.log
+  user: ""                              # orynd 以 root 运行时降权到的账号；空 = 自动使用本实例的专用账号
+  egress_port: 7811                     # 沙箱内模型代理监听的回环端口
+  verify_omp: true
+  model: ""                             # 协调对话的默认模型（provider/id）；空 = omp 配置的默认模型
+  web_allow_hosts: []                   # 全局助手联网时额外允许连接的非公网目标（小写 host 或 host:port）
+```
+
+各键的类型与约束见 [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/)。`web_allow_hosts` 的用法见[助手联网、MCP 与后台研究](/admin/components/assistant-network/)。
+
+`dir` 下有这些内容：
+
+| 路径 | 内容 |
+|---|---|
+| `bin/omp` | `omp_path` 的 0555 副本，源文件大小或 mtime 变了才重拷 |
+| `homes/` | 0755，属于 `orynd` |
+| `homes/<orb id>/` | 每个协调环境一个，0700，属于降权账号，是协调 Agent 唯一可写的目录：会话文件、下发的 `models.yml` 与 `config.yml`（有助手可用的 MCP 服务器时还有 `mcp.json`）、系统提示词、覆盖层、生图结果所在的 `tmp/` |
+| `host.log` | 子进程的 stderr，超过 5 MiB 轮转为 `host.log.1` |
+
+删除一个协调环境只删它自己的 `homes/<orb id>/`。拉起新一代协调环境之前先停掉旧一代的子进程，所以同一时刻至多一个协调宿主子进程。
+
+## 以 root 运行时使用专用账号
+
+`orynd` 以 root 运行时，沙箱降权到一个只属于这个 Oryn 实例的系统账号，而不是与其它服务共用的 `nobody`：
+
+- `coordinator.user` 为空（缺省）、`nobody`、`nfsnobody`，或解析出 uid 65534 的账号时，使用 `oryn-coord-<8 位十六进制>`，后缀是协调目录绝对路径的 fnv32a，同一台机器上不同实例的账号不同。后三种写法记一条警告，配置不用改。
+- 账号不存在时，控制面执行一次下面的命令（uid 由系统分配）：
+
+  ```bash
+  useradd --system --no-create-home --home-dir /nonexistent --shell <nologin> --user-group oryn-coord-<后缀>
+  ```
+
+  `useradd` 不存在或失败（例如 systemd 单元带 `ProtectSystem=strict`，`/etc` 只读）时，协调功能不可用，原因里有失败输出与这条命令，手工执行一次即可。也可以在 `coordinator.user` 指定一个你自己建的专用账号。
+- 已有部署升级后，下次拉起协调宿主时 HOME 的属主递归改成新账号，会话照常接续。`GET /api/v1/coordinator` 的 `sandbox.uid` 就是这个账号的 uid。
+- 每次拉起前都检查这个账号此刻没有被本实例以外的进程使用；有就不可用，原因为 `coordinator account "…" (uid N) is used by other processes (pid P); use a dedicated account`，控制面不会去杀这些进程。显式指定的账号同样检查，所以不要指定登录用户或其它服务的账号。
+- 卸载时可以 `userdel oryn-coord-<后缀>`。
+
+root 或 Docker 部署时，把 `coordinator.dir` 放在降权账号进得去的地方（容器里挂一个卷），`data_dir` 保持 0700。默认的 `<data_dir>/coordinator` 在 0700 的 `data_dir` 下，root 部署必须把 `dir` 移出来，例如 `/var/lib/oryn-coordinator`。专用账号建在容器里时，重建容器后会再建一次（uid 可能不同，HOME 属主随之改过来）。
+
+## 确认内核与权限前提
+
+下面任何一条不满足，协调功能就不可用：建 Space、开助手对话时回 `409 coordinator_unavailable` 并带原因，其它功能照常。没有「关掉沙箱」的开关。
+
+沙箱只靠 Landlock 管文件、TCP 端口与信号。内核的 Landlock ABI 低于某项能力所需的版本时，对应规则会被丢掉，所以缺的那一项必须由别的机制补上，补不上就拒绝启动：
+
+| 要求 | 内核 / 条件 | 不满足时的原因（`GET /api/v1/coordinator`） |
+|---|---|---|
+| Landlock ABI ≥ 2（跨目录改名的 refer 权限） | 内核 ≥ 5.19，Landlock LSM 已启用（`cat /sys/kernel/security/lsm` 里有 `landlock`） | `内核 Landlock ABI N < 2…` |
+| TCP：有网络命名空间，**或** Landlock ABI ≥ 4（按端口限制 TCP） | 能建网络命名空间（root，或开放了非特权 user namespace）；否则内核 ≥ 6.7 | `内核 Landlock ABI N < 4 且没有网络命名空间，无法限制 TCP 出站…` |
+| 信号：有 PID 命名空间，**或**沙箱降权到独立用户（`orynd` 以 root 运行），**或** Landlock ABI ≥ 6（信号作用域） | 命名空间与网络命名空间一起建；否则 root 部署，或内核 ≥ 6.12 | `内核 Landlock ABI N < 6、没有 PID 命名空间且沙箱与 orynd 是同一用户，无法阻止向 orynd 等同用户进程发信号…` |
+| `orynd` 以 root 运行时：降权账号可用、不是 root、没有被本实例以外的进程使用，且 `coordinator.dir` 的每一级父目录对它可进入（other 有 `x` 位） | 见上一节 | `cannot create the coordinator account …`、`… is used by other processes …`、`… is not reachable by user …` 等 |
+
+Debian 13 默认内核（6.12，ABI 6）无论有没有命名空间都可用。
+
+仓库里的 `deploy/systemd/orynd.service` 不用改：`<data_dir>/coordinator` 在 `ReadWritePaths` 之内，单元没有限制命名空间与系统调用。
+
+<Aside type="caution">
+如果你自己给 systemd 单元加了 `RestrictNamespaces=`，协调宿主会退到「按端口限制」模式；加了 `SystemCallFilter=` 且挡掉了 `landlock_*` 或 `seccomp`，协调功能会不可用。
+</Aside>
+
+**代理端口**：有网络命名空间时，`egress_port` 在命名空间里，与主机上的端口互不相干。没有命名空间（按端口限制模式）时，它直接绑定在主机的 `127.0.0.1` 上，必须是主机上没人用的端口；被占用时协调功能立即不可用，原因为 `出站代理端口 127.0.0.1:<port> 已被占用…`。此时在 `coordinator.egress_port` 换一个端口后重启 `orynd`；控制面不会自动换端口，因为端口同时写进 omp 的配置与沙箱的连接白名单。
+
+## 运行 coordinator check
+
+```bash
+sudo -u oryn orynd --config /etc/oryn/orynd.yaml coordinator check   # root 部署去掉 sudo -u oryn
+```
+
+它先打印探测结论（能否建网络命名空间、Landlock ABI）与可用性（root 部署时带降权账号的名字与 uid），再用与正式运行相同的参数，在一次性的 HOME 里起一个沙箱子进程，逐项打印一行 JSON：
+
+- **必须失败**的项，例如读 `master.key`、`oryn.db`、配置文件与 `/etc/shadow`，在 home 之外建文件，执行 `/bin/sh` 或 home 里的程序，连 `1.1.1.1:443` 与白名单外的回环端口，建 UDP、unix、netlink 等套接字，`unshare`、`mount`、`ptrace`、`clone3`，向父进程发信号。
+- **必须成功**的项，例如 home 内写文件并跨目录改名、home 内的 flock 与 OFD 锁、建一对 stream unix `socketpair`、`omp --version`、连接预先监听好的代理端口。
+- `/proc/self/status` 的 `NoNewPrivs: 1`、`Seccomp: 2`、能力集为空。
+
+全部通过时退出码为 0。root 部署时，`coordinator check` 与 `orynd` 一样会在需要时创建专用账号。在按端口限制模式下，`orynd` 运行着协调宿主时再跑 `coordinator check`，端口正被它自己占着，会报端口占用，先停 `orynd` 再检查。参数与输出格式见 [`orynd` 参考](/reference/cli/orynd/)。
+
+## 了解不同部署方式得到的隔离
+
+| 环境 | 命名空间 | Landlock | 降权 | 结果 |
+|---|---|---|---|---|
+| 开发机（root，Arch，内核 7.x） | 有 | 有 | 专用账号 `oryn-coord-<后缀>` | 全部 |
+| systemd 单元（`User=oryn`；Debian 13 / Arch / Fedora） | 有（非特权 user namespace） | 有（Debian 13 = ABI 6） | 不适用 | 全部（文件靠 Landlock，不靠 uid） |
+| systemd 单元，Ubuntu 23.10+ 默认 AppArmor | 探测失败时不用 | 有（6.8 = ABI 4） | 不适用 | 不可用：没有 PID 命名空间、同一用户，ABI 低于 6 拦不住信号（以 root 运行 `orynd` 或放开 user namespace 即可） |
+| Docker 里的 `orynd`（默认 seccomp，容器内 root） | 无 | 主机内核 Landlock ABI ≥ 4，且 Docker ≥ 20.10.18 | 专用账号（容器里要有 `useradd`，或预先建好并写进 `coordinator.user`） | 文件 + 按端口限制的网络；ABI 低于 4 时不可用 |
+
+沙箱由下面几层组成：
+
+| 层 | 内容 |
+|---|---|
+| 启动开关 | omp 以 `--no-tools --tools <内置工具> --no-skills --no-extensions --no-rules --no-context-files --no-lsp` 启动。Space 协调者的内置工具只有 `read,write`；全局助手的是 `read,write,web_search,generate_image`。环境变量从零构造 |
+| 文件 | 每次协调 Agent 启动前重写下发的 `models.yml`、`config.yml`（只有占位密钥）与 `mcp.json`；全局助手文件库同步到 `~/library/{shared,threads}/`（只读）；cwd 是空目录 |
+| 控制面 | 协调线程的 RPC 命令走白名单；`bash`、`eval`、终端、设置写入等命令到不了 omp |
+| Landlock | 只有本环境的 `<dir>/homes/<orb id>` 可写（不可执行）；可执行的只有 omp 本体与它的 ELF 解释器；少量系统目录只读可见；ABI ≥ 4 时 TCP 只能 connect `egress_port`、不能 bind 任何端口；ABI ≥ 6 时信号不出沙箱 |
+| seccomp | 非本机架构与 x32 调用直接杀进程；`socket` 只放行 TCP；`AF_UNIX` 套接字一律拒绝，只放行 stream 的 `socketpair`；改资源上限与调度的调用只能作用于自身；带 `CLONE_NEW*` 的 `clone`、`unshare` 等被拒绝 |
+| 权限 | `no_new_privs`；能力集与边界集清空；root 部署时降权到本实例的专用账号 |
+| 命令行 | 系统提示词写在 HOME 里的文件中（0600），`/proc/<pid>/cmdline` 里看不到提示词正文 |
+| 命名空间（能建就建） | 独立的网络（只有回环）、PID、IPC、UTS 命名空间；非 root 时外加一个只映射自己的 user namespace |
+
+协调沙箱面对不可信输入时的边界与残余风险见[协调沙箱与不可信输入](/security/sandbox-untrusted/)。
+
+## 排查协调宿主
+
+- 运行中的协调宿主的输出在 `<dir>/host.log`；当前生效的隔离见 `GET /api/v1/coordinator` 的 `sandbox`。
+- 协调环境不参与空闲冻结与停机。控制面启动后，以及之后每 30 秒，会确认协调宿主子进程在运行、全局助手主线的 Agent 已起好，并备好一个对你不可见的备用助手对话；新建助手对话时直接认领它，随后在后台补一个新的。备用对话放满 1 小时换新的。因此常驻占用是协调宿主子进程加两个协调 omp（每个上百 MB）；其它助手对话的 Agent 在打开对话页时按需启动。
+- 会话文件在 `<dir>/homes/<orb id>`，主机重启后接着同一个会话。
+- 子进程意外退出时，若协调环境已就绪，控制面把它停下再唤醒；若还在启动，就原地重新拉起子进程。5 分钟内连续 3 次意外退出后不再拉起，常驻检查也暂停：已就绪的停在 `stopped`，等最早那次崩溃滑出 5 分钟窗口后由常驻检查再唤醒（期间发消息照常唤醒）；启动中的由连接超时转为 `failed`，要在页面上点「重试」。
+
+## 升级协调宿主
+
+同时替换 `orynd` 与 `/usr/local/lib/oryn/omp`，然后重启 `orynd`。旧的子进程随旧 `orynd` 退出。新进程拉起前发现源文件变了会重拷 `<dir>/bin/omp`；natives 由 omp 首次运行时解压到 `<dir>/homes/<orb id>/.omp/natives/<版本>` 并清理旧版本。完整升级顺序见[升级](/admin/operations/upgrade/)。
+
+## 限制
+
+| 项 | 值 |
+|---|---|
+| 同一时刻的协调宿主子进程 | 至多 1 个 |
+| 常驻协调 omp | 2 个，每个上百 MB |
+| 常驻检查间隔 | 30 秒 |
+| 备用助手对话的有效期 | 1 小时 |
+| 自动重新拉起的熔断 | 5 分钟内连续 3 次意外退出 |
+| `host.log` 轮转大小 | 5 MiB |
+| `egress_port` 缺省 | `7811` |
+
+## 相关
+
+- [认识全局助手](/guide/assistant/overview/)
+- [Space：并行协调多条线程](/guide/automation/spaces/)
+- [助手联网、MCP 与后台研究](/admin/components/assistant-network/)
+- [协调沙箱与不可信输入](/security/sandbox-untrusted/)
+- [`orynd` 命令参考](/reference/cli/orynd/)
+- [`orynd.yaml` 配置参考](/reference/config/orynd-yaml/)
